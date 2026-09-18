@@ -1,20 +1,20 @@
 # kitannn° portfolio v2
 
 A window/desktop-style redesign (inspired by 109ichiki.com) with birbKit as the centerpiece.
-Deploys to **https://v2.kitannn.com** via GitHub Pages (`CNAME` file in this repo).
+Deploys to **https://kitannn.com** via GitHub Pages (`CNAME` file in this repo). The classic site lives at v2.kitannn.com.
 
 ## ✏️ Updating content later (checklist)
 
 1. Edit content in the **main site**: `E:\Dev\Kitannn\Portfolio\data.js` (text, work entries, responsibilities),
    and add/replace photos in `Portfolio\images\` or the résumé in `Portfolio\assets\resume\`.
-2. Commit and push the **Portfolio** repo → updates kitannn.com.
+2. Commit and push the **Portfolio** repo → updates the classic site at v2.kitannn.com.
 3. In this folder, copy the changes over:
    ```powershell
    cd E:\Dev\Kitannn\Portfolio-v2
    powershell -ExecutionPolicy Bypass -File .\sync.ps1
    ```
 4. If you changed `data.js`, bump `data.js?v=N` in `index.html` so browsers fetch the new copy.
-5. Commit and push **this** repo → updates v2.kitannn.com.
+5. Commit and push **this** repo → updates kitannn.com.
 
 Never edit `data.js`, `cv.html`, `images/` or `assets/` in this repo directly — the next sync overwrites them.
 
@@ -43,6 +43,8 @@ python -m http.server 8768 --directory .
 ```
 then open http://localhost:8768/
 
-## Swapping with the main site later
-Put `kitannn.com` in this repo's `CNAME` and `v2.kitannn.com` in the old repo's, then update
-Settings → Pages → Custom domain in both. No DNS changes needed.
+## Domains
+Swapped on 2026-09-17: this repo serves **kitannn.com**, the classic `kitannn.github.io` repo serves **v2.kitannn.com**.
+A domain can only belong to one repo at a time, so to swap back: first change **this** repo's `CNAME` and
+Settings → Pages → Custom domain to `v2.kitannn.com`, then change the classic repo's to `kitannn.com`.
+DNS never needs to change.

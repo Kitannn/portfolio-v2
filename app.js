@@ -81,7 +81,7 @@
 
   const foot = () => `
     <footer class="foot">
-      <div>(c) ${new Date().getFullYear()} ${esc(S.name)}<br><a href="https://kitannn.com">← classic site</a></div>
+      <div>(c) ${new Date().getFullYear()} ${esc(S.name)}<br><a href="https://v2.kitannn.com">← classic site</a></div>
       <a href="#top" data-top>Back to top ↑</a>
       ${barcode(S.name)}
     </footer>`;
