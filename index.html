@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>kitannn° — Portfolio v2</title>
+  <meta name="description" content="Henry Tan (kitannn) — game designer and photographer based in Vancouver.">
+  <meta name="theme-color" content="#0e0d12">
+  <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="images/favicon-180.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=1">
+</head>
+<body>
+  <!-- Page chrome: frame, status bar, header -->
+  <div class="frame" aria-hidden="true"></div>
+  <div class="status">
+    <button class="theme-dots" type="button" aria-label="Toggle light / dark theme"><i></i><i></i></button>
+    <span class="clock" title="Vancouver time">--:--</span>
+  </div>
+  <header class="top">
+    <a class="mark" href="#/" aria-label="Home"><img src="images/birbkit-256.jpg" alt=""><span id="mark-text">kitannn°</span></a>
+    <nav class="pill-nav">
+      <a href="#/" data-page="home">Home</a>
+      <a href="#/works" data-page="works">Works</a>
+      <a href="#/profile" data-page="profile">Profile</a>
+      <a href="#/contact" data-page="contact">Contact</a>
+    </nav>
+    <div class="socials" id="socials"></div>
+  </header>
+
+  <main id="app"></main>
+
+  <!-- Project window (modal) -->
+  <div class="modal" id="modal" hidden>
+    <div class="modal-scrim" data-close></div>
+    <section class="win modal-win" role="dialog" aria-modal="true" aria-labelledby="modal-title"></section>
+  </div>
+
+  <noscript><p style="padding:120px 32px">Henry Tan — game designer in Vancouver. hkitannn[at]gmail.com</p></noscript>
+  <!-- data.js, images/, assets/ and cv.html are synced from ../Portfolio by sync.ps1 — edit content there. -->
+  <script src="data.js?v=1"></script>
+  <script src="gl.js?v=1"></script>
+  <script src="app.js?v=1"></script>
+</body>
+</html>
