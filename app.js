@@ -66,9 +66,9 @@
   if (!reduceMotion) requestAnimationFrame(tick);
 
   // ---------- shared bits ----------
-  const secHead = (title, lede, link) => `
+  const secHead = (title, lede, link, kicker) => `
     <div class="sec-head fade">
-      <div><h2 class="sec-title">${esc(title)}</h2>${barcode(title)}${lede ? `<p class="sec-lede">${esc(lede)}</p>` : ""}</div>
+      <div>${kicker ? `<div class="sec-kicker">(${esc(kicker)})</div>` : ""}<h2 class="sec-title">${esc(title)}</h2>${barcode(title)}${lede ? `<p class="sec-lede">${esc(lede)}</p>` : ""}</div>
       ${link ? `<a class="sec-link" href="${link[1]}">(${esc(link[0])})</a>` : ""}
     </div>`;
 
@@ -91,7 +91,7 @@
     // Each window is a lens onto a larger image pinned in hero space (field = zoom × hero, centred on the window's
     // starting spot). Dragging reveals other parts; at the field's edge the image is pulled along so it never gaps.
     // Sizes are for a 1280×800 hero and scale up with larger screens (see --s in initHero).
-    { id: "portrait", title: "portrait.jpg", src: S.portrait, x: 6, y: 15, w: 250, h: 320, depth: 18, zoom: 0.62, href: "#/profile" },
+    { id: "birbkit", title: "birbkit.jpg", src: "images/birbkit-1024.jpg", x: 6, y: 15, w: 250, h: 320, depth: 18, zoom: 0.3, href: "#/profile" },
     { id: "sims", title: "town_stories.webp", src: games[1]?.cover, x: 39, y: 13, w: 215, h: 140, depth: 24, zoom: 0.5, href: `#/works/${slug(games[1]?.title || "")}` },
     { id: "cc", title: "cosmic_carnage.jpg", src: games[0]?.cover, x: 20, y: 51, w: 370, h: 225, depth: 30, zoom: 0.6, href: `#/works/${slug(games[0]?.title || "")}` },
     { id: "photo", title: "tokyo.jpg", src: photos[0]?.cover, x: 46, y: 47, w: 185, h: 235, depth: 12, zoom: 0.55, href: `#/works/${slug(photos[0]?.title || "")}` },
@@ -123,7 +123,7 @@
     home: () => `
       <section class="hero" id="top">
         <div class="layer" data-depth="6"><div class="hero-grid"><canvas data-gl="grid" data-cells="12,10" data-amp="0.024"></canvas>${warpSvg(12, 10, 2.4)}</div></div>
-        <div class="layer" data-depth="10"><div class="hero-birb"><img src="${esc(asset("images/birbkit-1024.jpg"))}" alt="birbKit, ${esc(first)}'s avatar"></div></div>
+        <div class="layer" data-depth="10"><div class="hero-birb"><img src="${esc(asset(S.portrait))}" alt="${esc(S.name)}"></div></div>
         ${heroWindows.filter((w) => w.src).map((w, i) => `
           <div class="layer" data-depth="${w.depth}">
             <div class="win float-win" data-win="${w.id}" data-zoom="${w.zoom}" style="--i:${i};left:${w.x}%;top:${w.y}%;width:calc(${w.w}px * var(--s, 1));height:calc(${w.h}px * var(--s, 1));z-index:${10 + i}">
@@ -138,7 +138,7 @@
       </section>
 
       <section class="section">
-        ${secHead("About", S.about[0], ["Profile", "#/profile"])}
+        ${secHead(`Hi, I'm ${first}`, S.about[0], ["Profile", "#/profile"], "About")}
         <div class="sec-body fade"><div class="stats">${S.stats.map(([n, l]) => `<div><b>${esc(n)}</b><span>${esc(l)}</span></div>`).join("")}</div></div>
       </section>
 

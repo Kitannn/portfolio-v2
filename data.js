@@ -16,7 +16,7 @@ window.SITE = {
   faqImageCrop: false, // remove (or set true) to crop the FAQ image to portrait 4:5
 
   about: [
-    "I'm a game designer with 5+ years of development experience, specializing in content and technical design for live service titles.",
+    "I'm a game designer with 6+ years of development experience, specializing in content and technical design for live service titles.",
     "I started in QA and game security on FIFA Mobile, moved into game and technical design at EA, then designed FTUE, quests and event loops for The Sims: Town Stories at Maxis. Today I'm Game Director at Ghost Fox Games — a studio of EA veterans in the 2026 Roblox Incubator — building Cosmic Carnage.",
     "Off the clock I shoot street, travel and portrait photography, and a lot of live music.",
   ],
@@ -31,8 +31,8 @@ window.SITE = {
   ],
 
   stats: [
-    ["5+", "Years in games"],
-    ["3", "Franchises shipped on"],
+    ["6+", "Years in games"],
+    ["2", "Franchises shipped on"],
     ["2026", "Roblox Incubator"],
   ],
 
@@ -40,7 +40,7 @@ window.SITE = {
 
   // Résumé — feeds the Profile timeline and cv.html.
   cv: {
-    summary: "Game Designer with 5+ years of development experience specializing in content and technical design for live service titles. Proven track record of mastering complex tools and delivering in fast-paced environments.",
+    summary: "Game Designer with 6+ years of development experience specializing in content and technical design for live service titles. Proven track record of mastering complex tools and delivering in fast-paced environments.",
     experience: [
       {
         org: "Ghost Fox Games", role: "Game Director", project: "Cosmic Carnage, Roblox Studio", when: "Apr 2026 – Present",
