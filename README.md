@@ -32,8 +32,8 @@ Large source originals (`birbKit.jpg`, `CC_KeyArt_*.png`) are skipped.
 ## Files
 - `index.html` — page chrome (frame, clock, nav)
 - `style.css` — theme tokens at the top
-- `app.js` — hash router, pages, draggable windows, project modal
-- `gl.js` — WebGL2 effects (grid, holo band, clouds, hover distortion) with CSS/SVG fallbacks
+- `app.js` — hash router, loading screen + intro, draggable lens windows, cloud physics, VCR works reel, project modal
+- `gl.js` — WebGL2 effects (warped grid, raymarched clouds, VCR playback, hover distortion) with CSS/SVG fallbacks
 
 Bump the `?v=` numbers in `index.html` when you change CSS/JS so browsers don't serve stale copies.
 

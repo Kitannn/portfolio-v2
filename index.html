@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>kitannn° — Portfolio v2</title>
+  <title>Henry Tan — Portfolio</title>
   <meta name="description" content="Henry Tan (kitannn) — game designer and photographer based in Vancouver.">
   <meta name="theme-color" content="#0e0d12">
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32.png">
@@ -11,9 +11,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=1">
+  <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
+  <!-- Loading screen: app.js fills the bar as hero images load, then drains it and starts the intro. -->
+  <div id="loader" aria-hidden="true"><div class="ld"><div class="ld-top"><span>LOADING...</span><span class="ld-pct">0%</span></div><div class="ld-bar"><i></i></div></div></div>
   <!-- Page chrome: frame, status bar, header -->
   <div class="frame" aria-hidden="true"></div>
   <div class="status">
@@ -21,7 +23,7 @@
     <span class="clock" title="Vancouver time">--:--</span>
   </div>
   <header class="top">
-    <a class="mark" href="#/" aria-label="Home"><img src="images/birbkit-256.jpg" alt=""><span id="mark-text">kitannn°</span></a>
+    <a class="mark" href="#/" aria-label="Home"><img src="images/birbkit-256.jpg" alt=""><span id="mark-text">Henry Tan</span></a>
     <nav class="pill-nav">
       <a href="#/" data-page="home">Home</a>
       <a href="#/works" data-page="works">Works</a>
@@ -42,7 +44,7 @@
   <noscript><p style="padding:120px 32px">Henry Tan — game designer in Vancouver. hkitannn[at]gmail.com</p></noscript>
   <!-- data.js, images/, assets/ and cv.html are synced from ../Portfolio by sync.ps1 — edit content there. -->
   <script src="data.js?v=1"></script>
-  <script src="gl.js?v=1"></script>
-  <script src="app.js?v=1"></script>
+  <script src="gl.js?v=2"></script>
+  <script src="app.js?v=2"></script>
 </body>
 </html>

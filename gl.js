@@ -1,4 +1,4 @@
-// kitannn° v2 — WebGL2 effects: warped grid, holographic band, raymarched clouds, hover image distortion.
+// Portfolio v2 — WebGL2 effects: warped grid, raymarched clouds, VCR playback, hover image distortion.
 // Every effect is progressive: if WebGL2 is missing the CSS/SVG fallback in the page stays visible.
 (() => {
   const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -33,29 +33,15 @@ void main() {
   float a = line * inside * (u_col.a + u_hover * .55 * exp(-d * 7.));
   o = vec4(u_col.rgb * a, a);
 }`,
-    // Iridescent foil: layered sine bands through a cosine palette, a moving sheen and fine diffraction lines.
-    holo: HEAD + `
-void main() {
-  vec2 uv = gl_FragCoord.xy / u_res;
-  float t = u_time;
-  vec2 p = vec2(uv.x * u_res.x / u_res.y, uv.y);
-  float n = sin(p.x * .35 + t * .5) + sin(p.x * .21 - p.y * 2.5 + t * .8) + .5 * sin((p.x + p.y) * .6 - t * .4);
-  n += (u_mouse.x - .5) * 1.6 * u_hover;
-  vec3 col = .5 + .5 * cos(6.28318 * (vec3(0., .33, .67) + n * .16 + uv.x * .4));
-  col = mix(col, vec3(1.), .42);
-  float sheen = pow(max(0., sin(p.x * .25 - t * 1.1 + p.y * 1.4)), 28.);
-  col += sheen * .55;
-  col *= .93 + .07 * sin(gl_FragCoord.x * 1.2 + gl_FragCoord.y * .45);
-  o = vec4(col, 1.);
-}`,
     // Soft 3D cloud: smooth-unioned spheres with a little surface noise, wrap lighting and a cool rim.
     cloud: HEAD + `
-uniform float u_seed;
+uniform float u_seed; uniform vec2 u_rot;
 mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }
 float smin(float a, float b, float k) { float h = clamp(.5 + .5 * (b - a) / k, 0., 1.); return mix(b, a, h) - k * h * (1. - h); }
 float map(vec3 p) {
-  p.xz *= rot(sin(u_time * .35 + u_seed * 2.) * .45);
-  p.xy *= rot(sin(u_time * .4 + u_seed) * .12);
+  p.yz *= rot(u_rot.x);
+  p.xz *= rot(u_rot.y + sin(u_time * .35 + u_seed * 2.) * .25);
+  p.xy *= rot(sin(u_time * .4 + u_seed) * .1);
   float d = length(p - vec3(-.55, -.12, 0.)) - .40;
   d = smin(d, length(p - vec3(0., .14, 0.)) - .55, .25);
   d = smin(d, length(p - vec3(.56, -.08, .06)) - .40, .25);
@@ -63,6 +49,8 @@ float map(vec3 p) {
   d = smin(d, length(p - vec3(-.2, -.2, -.28)) - .34, .25);
   d = smin(d, length(p - vec3(-.32, .18, .05)) - .34, .22);
   d = smin(d, length(p - vec3(.34, .16, -.02)) - .32, .22);
+  d = smin(d, length(p - vec3(.02, -.02, .34)) - .38, .25);
+  d = smin(d, length(p - vec3(.05, .0, -.34)) - .36, .25);
   d = max(d, -.36 - p.y); // flat-ish base
   return d + .016 * sin(p.x * 11. + u_seed) * sin(p.y * 9. + u_time * .5) * sin(p.z * 10.);
 }
@@ -90,6 +78,32 @@ void main() {
   float a = hit ? 1. : smoothstep(.014, 0., md);
   o = vec4(col * a, a);
 }`,
+    // VHS playback: two cover-fit textures cross-fading, line jitter, a rolling tear band, RGB split,
+    // scanlines, noise and vignette. u_glitch spikes on every cut between works.
+    vcr: HEAD + `
+uniform sampler2D u_a, u_b; uniform vec2 u_ia, u_ib; uniform float u_mix, u_glitch;
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+vec2 cover(vec2 f, vec2 img) { float sc = max(u_res.x / img.x, u_res.y / img.y); return (f - u_res * .5) / (img * sc) + .5; }
+vec3 samp(vec2 f) { return mix(texture(u_a, cover(f, u_ia)).rgb, texture(u_b, cover(f, u_ib)).rgb, u_mix); }
+void main() {
+  vec2 f = gl_FragCoord.xy, uv = f / u_res;
+  float t = u_time, px = u_res.y / 900.;
+  float by = 1. - fract(t * .06), bd = abs(uv.y - by);
+  float band = smoothstep(.07, 0., bd);
+  float blockGlitch = u_glitch * step(.55, hash(vec2(floor(f.y / (22. * px)), floor(t * 30.))));
+  f.x += (hash(vec2(floor(f.y / (2. * px)), floor(t * 24.))) - .5) * px * (1.2 + 26. * band + 90. * blockGlitch);
+  f.x += sin(uv.y * 38. + t * 2.) * .7 * px;
+  float ca = px * (2. + 5. * band + 14. * u_glitch);
+  vec3 col = vec3(samp(f + vec2(ca, 0.)).r, samp(f).g, samp(f - vec2(ca, 0.)).b);
+  float l = dot(col, vec3(.299, .587, .114));
+  col = mix(vec3(l), col, 1.18) * .9 + .035;
+  col *= .8 + .2 * sin(gl_FragCoord.y * 1.9);
+  col += (hash(f + fract(t * 7.)) - .5) * (.09 + .25 * u_glitch);
+  col += vec3(.15, 1., .35) * smoothstep(.0035, 0., bd) * .75 + band * .05;
+  vec2 q = uv - .5;
+  col *= 1. - dot(q, q) * 1.15;
+  o = vec4(col, 1.);
+}`,
     // Hover distortion: ripple from the cursor, a gentle horizontal wave, RGB split and faint scanlines.
     distort: HEAD + `
 uniform sampler2D u_tex; uniform vec2 u_img;
@@ -108,7 +122,7 @@ void main() {
 }`,
   };
 
-  const UNIFORMS = ["u_res", "u_time", "u_mouse", "u_hover", "u_col", "u_cells", "u_amp", "u_seed", "u_tex", "u_img"];
+  const UNIFORMS = ["u_res", "u_time", "u_mouse", "u_hover", "u_col", "u_cells", "u_amp", "u_seed", "u_rot", "u_tex", "u_img", "u_a", "u_b", "u_ia", "u_ib", "u_mix", "u_glitch"];
 
   // ---------- core ----------
   const instances = new Set();
@@ -190,7 +204,8 @@ void main() {
       gl.uniform2f(u.u_cells, opts.cells[0], opts.cells[1]);
       gl.uniform1f(u.u_amp, opts.amp);
     }
-    if (inst.type === "cloud") gl.uniform1f(u.u_seed, opts.seed);
+    if (inst.type === "cloud") { gl.uniform1f(u.u_seed, opts.seed); const r = canvas._rot || [0, 0]; gl.uniform2f(u.u_rot, r[0], r[1]); }
+    if (inst.type === "vcr") vcrUniforms(inst);
     if (inst.type === "distort" && inst.img) gl.uniform2f(u.u_img, inst.img[0], inst.img[1]);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
@@ -208,13 +223,59 @@ void main() {
   };
   requestAnimationFrame(loop);
 
+  // ---------- VCR controller ----------
+  const texture = (gl, src) => {
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    if (src) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+    else gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([8, 8, 10, 255]));
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return tex;
+  };
+  const vcrUniforms = (inst) => {
+    const { gl, u } = inst;
+    inst.mix = Math.min(1, inst.mix + (reduceMotion ? 1 : 0.07));
+    inst.glitch *= reduceMotion ? 0 : 0.92;
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, inst.tex[inst.prev] || inst.blank);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, inst.tex[inst.cur] || inst.blank);
+    gl.uniform1i(u.u_a, 0); gl.uniform1i(u.u_b, 1);
+    gl.uniform2fv(u.u_ia, inst.size[inst.prev] || [1, 1]);
+    gl.uniform2fv(u.u_ib, inst.size[inst.cur] || [1, 1]);
+    gl.uniform1f(u.u_mix, inst.mix);
+    gl.uniform1f(u.u_glitch, inst.glitch);
+    if (inst.mix < 1 || inst.glitch > 0.01) inst.dirty = true;
+  };
+  const vcrController = (inst) => {
+    Object.assign(inst, { tex: [], size: [], cur: -1, prev: -1, mix: 1, glitch: 0, blank: texture(inst.gl) });
+    return {
+      set(i, src) {
+        inst.gl.activeTexture(inst.gl.TEXTURE2);
+        inst.tex[i] = texture(inst.gl, src);
+        inst.size[i] = [src.naturalWidth || src.width, src.naturalHeight || src.height];
+        inst.dirty = true;
+      },
+      show(i) {
+        if (i === inst.cur) return;
+        const first = inst.cur < 0;
+        inst.prev = first ? i : inst.cur;
+        inst.cur = i;
+        inst.mix = first ? 1 : 0;
+        inst.glitch = first ? 0 : 1;
+        inst.dirty = true;
+      },
+    };
+  };
+
   // theme changes recolor the grids
   addEventListener("kv2-theme", () => instances.forEach((i) => { if (i.type === "grid") { i.col = parseColor(getComputedStyle(i.canvas).color); i.dirty = true; } }));
 
   // ---------- hover distortion (one shared canvas that hops between images) ----------
   let fx = null;
   const textures = new Map();
-  const FX_TARGETS = ".float-win .win-body img, .work .thumb img, .profile-side .win-body img";
+  const FX_TARGETS = ".work .thumb img, .profile-side .win-body img";
   const texFor = (img) => {
     const { gl } = fx;
     let tex = textures.get(img.currentSrc || img.src);
@@ -264,8 +325,10 @@ void main() {
       root.querySelectorAll("canvas[data-gl]").forEach((c) => {
         const type = c.dataset.gl;
         const opts = type === "grid" ? { cells: c.dataset.cells.split(",").map(Number), amp: +c.dataset.amp } : type === "cloud" ? { seed: +c.dataset.seed || 0 } : {};
-        if (create(c, type, opts)) c.parentElement.classList.add("gl-on");
-        else c.remove();
+        const inst = create(c, type, opts);
+        if (!inst) return c.remove();
+        c.parentElement.classList.add("gl-on");
+        if (type === "vcr") c._vcr = vcrController(inst);
       });
     },
     // Release contexts before a page re-render (browsers cap live WebGL contexts at ~16).
