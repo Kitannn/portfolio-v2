@@ -326,7 +326,7 @@ canvas[data-gl] { display: block; }
   .profile-side .sticker { right: -6px; width: 104px; }
   .pill-nav a { padding: 4px 7px; font-size: 9.5px; letter-spacing: .02em; }
   .status { right: 14px; }
-  .float-win[data-win="sims"], .float-win[data-win="photo"] { display: none; }
+  .float-win[data-win="sims"], .float-win[data-win="photo"], .float-win[data-win="fifa"] { display: none; }
   .float-win[data-win="portrait"] { left: 5% !important; top: 50% !important; }
   .float-win[data-win="cc"] { left: 38% !important; top: 60% !important; }
   .hero-birb { width: 70vw; top: 13%; }

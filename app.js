@@ -90,10 +90,12 @@
   const heroWindows = [
     // Each window is a lens onto a larger image pinned in hero space (field = zoom × hero, centred on the window's
     // starting spot). Dragging reveals other parts; at the field's edge the image is pulled along so it never gaps.
-    { id: "portrait", title: "portrait.jpg", src: S.portrait, x: 9, y: 18, w: 230, h: 290, depth: 18, zoom: 0.62, href: "#/profile" },
-    { id: "cc", title: "cosmic_carnage.jpg", src: games[0]?.cover, x: 27, y: 50, w: 330, h: 205, depth: 30, zoom: 0.6, href: `#/works/${slug(games[0]?.title || "")}` },
-    { id: "photo", title: "tokyo.jpg", src: photos[0]?.cover, x: 53, y: 57, w: 210, h: 250, depth: 12, zoom: 0.55, href: `#/works/${slug(photos[0]?.title || "")}` },
-    { id: "sims", title: "town_stories.webp", src: games[1]?.cover, x: 48, y: 17, w: 250, h: 165, depth: 24, zoom: 0.5, href: `#/works/${slug(games[1]?.title || "")}` },
+    // Sizes are for a 1280×800 hero and scale up with larger screens (see --s in initHero).
+    { id: "portrait", title: "portrait.jpg", src: S.portrait, x: 6, y: 15, w: 250, h: 320, depth: 18, zoom: 0.62, href: "#/profile" },
+    { id: "sims", title: "town_stories.webp", src: games[1]?.cover, x: 39, y: 13, w: 215, h: 140, depth: 24, zoom: 0.5, href: `#/works/${slug(games[1]?.title || "")}` },
+    { id: "cc", title: "cosmic_carnage.jpg", src: games[0]?.cover, x: 20, y: 51, w: 370, h: 225, depth: 30, zoom: 0.6, href: `#/works/${slug(games[0]?.title || "")}` },
+    { id: "photo", title: "tokyo.jpg", src: photos[0]?.cover, x: 46, y: 47, w: 185, h: 235, depth: 12, zoom: 0.55, href: `#/works/${slug(photos[0]?.title || "")}` },
+    { id: "fifa", title: "fifa_mobile.jpg", src: games[2]?.hero || games[2]?.cover, x: 61, y: 63, w: 285, h: 175, depth: 22, zoom: 0.55, href: `#/works/${slug(games[2]?.title || "")}` },
   ];
   // Cloud homes as fractions of the hero; physics in initHero pushes them around and springs them back.
   const cloudHomes = [{ x: 0.1, y: 0.16, w: 132 }, { x: 0.93, y: 0.1, w: 112 }, { x: 0.5, y: 0.92, w: 150 }, { x: 0.86, y: 0.78, w: 116 }];
@@ -124,7 +126,7 @@
         <div class="layer" data-depth="10"><div class="hero-birb"><img src="${esc(asset("images/birbkit-1024.jpg"))}" alt="birbKit, ${esc(first)}'s avatar"></div></div>
         ${heroWindows.filter((w) => w.src).map((w, i) => `
           <div class="layer" data-depth="${w.depth}">
-            <div class="win float-win" data-win="${w.id}" data-zoom="${w.zoom}" style="--i:${i};left:${w.x}%;top:${w.y}%;width:${w.w}px;height:${w.h}px;z-index:${10 + i}">
+            <div class="win float-win" data-win="${w.id}" data-zoom="${w.zoom}" style="--i:${i};left:${w.x}%;top:${w.y}%;width:calc(${w.w}px * var(--s, 1));height:calc(${w.h}px * var(--s, 1));z-index:${10 + i}">
               <div class="win-bar"><span>${esc(w.title)}</span><button class="win-x" type="button" aria-label="Close window" data-winclose>×</button></div>
               <div class="win-body"><a class="reveal" href="${w.href}" aria-label="Open ${esc(w.title)}"><img src="${esc(asset(w.src))}" alt="" draggable="false"></a></div>
             </div>
@@ -292,8 +294,12 @@
     const wins = [...hero.querySelectorAll(".float-win")];
     const fine = matchMedia("(pointer: fine)").matches;
     const mouse = { x: -1e4, y: -1e4, px: -1e4, py: -1e4, in: false };
-    let W = hero.clientWidth, H = hero.clientHeight;
-    const onResize = () => { W = hero.clientWidth; H = hero.clientHeight; };
+    let W = 0, H = 0;
+    const onResize = () => {
+      W = hero.clientWidth; H = hero.clientHeight;
+      hero.style.setProperty("--s", Math.max(1, Math.min(1.8, W / 1280, H / 800)).toFixed(3));
+    };
+    onResize();
     addEventListener("resize", onResize);
     onCleanup(() => removeEventListener("resize", onResize));
 
