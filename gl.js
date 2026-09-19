@@ -322,7 +322,7 @@ void main() {
   // One fixed full-screen canvas draws every .sec-title on the page as a texture quad over its DOM text.
   // A short trail of recent cursor points (position + velocity) drives the displacement, which fades out.
   const titleFx = (() => {
-    const N = 16, LIFE = 0.85; // trail points, seconds each point lives
+    const N = 32, LIFE = 0.9; // trail points, seconds each point lives
     const FS = `#version 300 es
 precision highp float;
 uniform sampler2D u_tex; uniform vec4 u_rect; uniform vec4 u_col; uniform float u_alpha, u_dpr;
@@ -333,26 +333,33 @@ float cov(vec2 f) {
   if (uv.x < 0. || uv.y < 0. || uv.x > 1. || uv.y > 1.) return 0.;
   return texture(u_tex, uv).a;
 }
+// thick streak: strongest coverage along the smear direction, so letters stretch into solid bands
+float streak(vec2 f, vec2 dsp) {
+  float s = 0.;
+  for (int k = 0; k < 5; k++) s = max(s, cov(f - dsp * (.35 + .2 * float(k))));
+  return s;
+}
 void main() {
   vec2 f = gl_FragCoord.xy, disp = vec2(0.);
-  float R = 120. * u_dpr;
+  float R = 42. * u_dpr; // tight brush: the smear happens right where the cursor passes
   for (int i = 0; i < ${N}; i++) {
     float life = 1. - u_age[i];
     if (life <= 0.) continue;
     vec2 d = f - u_trail[i].xy, v = u_trail[i].zw;
-    float sp = length(v), cap = 14. * u_dpr;
-    if (sp > cap) v *= cap / sp;                                                   // fast flicks don't explode
-    float r = length(d), fall = exp(-(r * r) / (R * R)) * life * life;
-    float speed = clamp(sp / (6. * u_dpr), 0., 1.);
-    disp += v * fall * .45;                                                        // smear along the motion
-    disp.x += sin(r / (8. * u_dpr) - u_age[i] * 16.) * fall * speed * 4. * u_dpr;  // concentric ripples
+    float sp = length(v), cap = 26. * u_dpr;
+    if (sp > cap) v *= cap / sp;
+    vec2 e = d;                                                           // round brush
+    float r2 = dot(e, e), fall = exp(-r2 / (R * R)) * life * life;
+    float speed = clamp(sp / (5. * u_dpr), 0., 1.);
+    disp += v * fall * 1.6;                                               // drag the pixels along with the cursor
+    disp.x += sin(sqrt(r2) / (5. * u_dpr) - u_age[i] * 18.) * fall * speed * 3. * u_dpr; // faint ripple inside the brush only
   }
-  disp.x *= 1.6; // stretch mostly sideways, like the reference
-  float dl = length(disp), lim = 34. * u_dpr;
-  disp *= lim * (1. - exp(-dl / lim)) / max(dl, 1e-4); // soft clamp: strong but letters stay readable
-  float m = clamp(length(disp) / (18. * u_dpr), 0., 1.);
-  vec2 ca = vec2(m * 8. * u_dpr, m * 1.5 * u_dpr);
-  float cr = cov(f - disp * 1.18 + ca), cg = cov(f - disp), cb = cov(f - disp * .82 - ca);
+  disp.x *= 1.5; // stretch mostly sideways, like the reference
+  float dl = length(disp), lim = 64. * u_dpr;
+  disp *= lim * (1. - exp(-dl / lim)) / max(dl, 1e-4); // soft clamp keeps it from tearing apart completely
+  float m = clamp(dl / (22. * u_dpr), 0., 1.);
+  vec2 ca = vec2(m * 15. * u_dpr, m * 2. * u_dpr);
+  float cr = streak(f + ca, disp * 1.2), cg = streak(f, disp), cb = streak(f - ca, disp * .8);
   float base = min(cr, min(cg, cb)), a = max(cr, max(cg, cb));
   vec3 col = u_col.rgb * base + (vec3(cr, cg, cb) - base); // exact text colour where channels agree, pure RGB fringes where they split
   o = vec4(col, a) * u_alpha;
@@ -391,9 +398,13 @@ void main() { vec2 px = u_rect.xy + p * u_rect.zw; gl_Position = vec4(px / u_res
       readFg();
       if (!reduceMotion) addEventListener("pointermove", (e) => {
         const now = performance.now();
-        if (last) trail.push({ x: e.clientX, y: e.clientY, vx: e.clientX - last.x, vy: e.clientY - last.y, t: now });
+        if (last) {
+          const dx = e.clientX - last.x, dy = e.clientY - last.y;
+          const steps = Math.min(6, Math.max(1, Math.ceil(Math.hypot(dx, dy) / 12))); // fill gaps on fast moves
+          for (let k = 1; k <= steps; k++) trail.push({ x: last.x + (dx * k) / steps, y: last.y + (dy * k) / steps, vx: dx, vy: dy, t: now });
+          while (trail.length > N) trail.shift();
+        }
         last = { x: e.clientX, y: e.clientY };
-        if (trail.length > N) trail.shift();
       }, { passive: true });
       addEventListener("kv2-theme", () => { readFg(); items.forEach((i) => { i.key = ""; }); });
       document.fonts?.ready.then(() => items.forEach((i) => { i.key = ""; }));
@@ -423,7 +434,7 @@ void main() { vec2 px = u_rect.xy + p * u_rect.zw; gl_Position = vec4(px / u_res
       if (it.skip) return;
       const tr = range.getBoundingClientRect();
       const text = cs.textTransform === "uppercase" ? el.textContent.toUpperCase() : el.textContent;
-      const pad = Math.ceil(tr.height * 0.7);
+      const pad = Math.ceil(Math.max(tr.height * 1.1, 80)); // room for the smear to spill past the glyphs
       Object.assign(it, { tx: tr.left - er.left, ty: tr.top - er.top, tw: tr.width, th: tr.height, pad });
       const c = document.createElement("canvas");
       c.width = Math.ceil((tr.width + pad * 2) * DPR); c.height = Math.ceil((tr.height + pad * 2) * DPR);
