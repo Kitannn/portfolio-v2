@@ -335,33 +335,58 @@
       img.style.transform = `translate(${ox}px, ${oy}px)`;
     };
 
-    // Clouds: soft bodies pushed by the cursor, bumping each other, springing back home.
+    // Clouds: free-floating bodies (like 109ichiki's objects). Each cruises on its own slowly-wandering heading,
+    // bounces off the hero's edges and off each other, tumbles freely, and gets knocked onto a new course by the
+    // cursor. No home positions — after a shove they relax back to cruising speed wherever they are.
+    const rand = (a, b) => a + Math.random() * (b - a);
     const bodies = [...hero.querySelectorAll(".cloud")].map((el, i) => ({
       el, canvas: el.querySelector("canvas"), w: el.offsetWidth, h: el.offsetWidth / 1.2, r: el.offsetWidth * 0.4,
-      hx: +el.dataset.hx, hy: +el.dataset.hy, x: 0, y: 0, vx: 0, vy: 0, rx: 0, ry: 0, sx: 0, sy: 0, seed: i * 1.3, live: false,
+      hx: +el.dataset.hx, hy: +el.dataset.hy, x: 0, y: 0, vx: 0, vy: 0,
+      heading: rand(0, Math.PI * 2), cruise: rand(70, 115),            // px/s
+      rx: rand(0, 6), ry: rand(0, 6), sx: 0, sy: 0,
+      bsx: rand(0.15, 0.4) * (Math.random() < 0.5 ? -1 : 1), bsy: rand(0.2, 0.5) * (Math.random() < 0.5 ? -1 : 1), // base tumble, rad/s
+      live: false, entering: true,
     }));
-    const place = (b) => { b.el.style.transform = `translate3d(${b.x - b.w / 2}px, ${b.y - b.h / 2}px, 0) rotate(${Math.max(-12, Math.min(12, b.vx * 0.8))}deg)`; };
-    const drop = () => bodies.forEach((b, i) => { b.x = b.hx * W; b.y = reduceMotion ? b.hy * H : -b.h - i * 90; b.vy = 1; b.live = true; place(b); });
+    const place = (b) => { b.el.style.transform = `translate3d(${b.x - b.w / 2}px, ${b.y - b.h / 2}px, 0)`; };
+    const drop = () => bodies.forEach((b, i) => {
+      b.x = b.hx * W;
+      b.y = reduceMotion ? b.hy * H : -b.h - i * 80;
+      b.vx = rand(-40, 40); b.vy = reduceMotion ? 0 : rand(260, 340); // fall in from above, then drift
+      b.sx = b.bsx; b.sy = b.bsy;
+      b.live = true; b.entering = !reduceMotion;
+      place(b);
+    });
     bodies.forEach((b) => { b.x = b.hx * W; b.y = -400; place(b); });
 
-    const stepClouds = (t) => {
-      const mvx = mouse.x - mouse.px, mvy = mouse.y - mouse.py;
+    const stepClouds = (dt) => {
+      const clampV = (v) => Math.max(-3000, Math.min(3000, v)); // first move after entering reads as a huge jump
+      const mvx = clampV((mouse.x - mouse.px) / dt), mvy = clampV((mouse.y - mouse.py) / dt); // cursor velocity, px/s
+      const relax = 1 - Math.exp(-0.9 * dt), spinRelax = 1 - Math.exp(-0.7 * dt);
       for (const b of bodies) {
         if (!b.live) continue;
-        const tx = b.hx * W, ty = b.hy * H + Math.sin(t * 0.8 + b.seed) * 8;
-        b.vx += (tx - b.x) * 0.0022; b.vy += (ty - b.y) * 0.0022;
-        b.vx *= 0.975; b.vy *= 0.975;
-        if (mouse.in && fine) {
-          const dx = b.x - mouse.x, dy = b.y - mouse.y, d = Math.hypot(dx, dy), R = b.r + 16;
+        // wander: the heading drifts slowly; velocity eases toward that cruise vector
+        b.heading += (Math.random() - 0.5) * 1.2 * dt;
+        if (!b.entering) {
+          b.vx += (Math.cos(b.heading) * b.cruise - b.vx) * relax;
+          b.vy += (Math.sin(b.heading) * b.cruise - b.vy) * relax;
+        }
+        // cursor collision: shove it away along the contact normal, plus some of the cursor's own motion
+        if (mouse.in && fine && dt > 0) {
+          const dx = b.x - mouse.x, dy = b.y - mouse.y, d = Math.hypot(dx, dy), R = b.r + 14;
           if (d < R && d > 0.01) {
             const nx = dx / d, ny = dy / d, vn = mvx * nx + mvy * ny;
             b.x = mouse.x + nx * R; b.y = mouse.y + ny * R;
-            const push = Math.max(vn, 0) * 0.9 + 1.2;
-            b.vx += nx * push + mvx * 0.25; b.vy += ny * push + mvy * 0.25;
-            b.sy += mvx * 0.004 + nx * 0.012; b.sx += mvy * 0.004 + ny * 0.012;
+            const push = Math.max(vn, 0) * 0.8 + 140;
+            b.vx += nx * push + mvx * 0.3; b.vy += ny * push + mvy * 0.3;
+            const sp = Math.hypot(b.vx, b.vy), max = 1400;
+            if (sp > max) { b.vx *= max / sp; b.vy *= max / sp; }
+            b.heading = Math.atan2(b.vy, b.vx);
+            b.sy += mvx * 0.004 + nx * 1.5; b.sx += mvy * 0.004 + ny * 1.5;
+            b.entering = false;
           }
         }
       }
+      // cloud–cloud: separate and exchange momentum (equal mass, slightly bouncy)
       for (let i = 0; i < bodies.length; i++) for (let j = i + 1; j < bodies.length; j++) {
         const a = bodies[i], c = bodies[j];
         if (!a.live || !c.live) continue;
@@ -370,29 +395,39 @@
           const nx = dx / d, ny = dy / d, o = (R - d) / 2;
           a.x -= nx * o; a.y -= ny * o; c.x += nx * o; c.y += ny * o;
           const rel = (c.vx - a.vx) * nx + (c.vy - a.vy) * ny;
-          if (rel < 0) { const k = -rel * 0.9; a.vx -= nx * k; a.vy -= ny * k; c.vx += nx * k; c.vy += ny * k; a.sy -= 0.01; c.sy += 0.01; }
+          if (rel < 0) {
+            const k = -rel * 0.95;
+            a.vx -= nx * k; a.vy -= ny * k; c.vx += nx * k; c.vy += ny * k;
+            a.heading = Math.atan2(a.vy, a.vx); c.heading = Math.atan2(c.vy, c.vx);
+            a.sy -= 0.8; c.sy += 0.8;
+          }
         }
       }
+      // integrate, bounce inside the hero, tumble
       for (const b of bodies) {
         if (!b.live) continue;
-        b.x += b.vx; b.y += b.vy;
-        if (b.x < b.r * 0.5) { b.x = b.r * 0.5; b.vx = Math.abs(b.vx) * 0.6; }
-        if (b.x > W - b.r * 0.5) { b.x = W - b.r * 0.5; b.vx = -Math.abs(b.vx) * 0.6; }
-        if (b.y > H - b.r * 0.3) { b.y = H - b.r * 0.3; b.vy = -Math.abs(b.vy) * 0.6; }
-        // tumble when hit, then settle back to the front-facing pose (nearest full turn)
-        const wrap = (v) => Math.atan2(Math.sin(v), Math.cos(v));
-        b.sx -= wrap(b.rx) * 0.004; b.sy -= wrap(b.ry) * 0.004;
-        b.sx = Math.max(-0.25, Math.min(0.25, b.sx)) * 0.955; b.sy = Math.max(-0.25, Math.min(0.25, b.sy)) * 0.955;
-        b.rx += b.sx; b.ry += b.sy;
+        b.x += b.vx * dt; b.y += b.vy * dt;
+        const m = b.r * 0.75;
+        if (b.entering && b.y > m + 20) { b.entering = false; b.heading = rand(0, Math.PI * 2); } // pick a fresh course once inside
+        let bounced = false;
+        if (b.x < m) { b.x = m; b.vx = Math.abs(b.vx) * 0.9; bounced = true; }
+        if (b.x > W - m) { b.x = W - m; b.vx = -Math.abs(b.vx) * 0.9; bounced = true; }
+        if (!b.entering && b.y < m) { b.y = m; b.vy = Math.abs(b.vy) * 0.9; bounced = true; }
+        if (b.y > H - m) { b.y = H - m; b.vy = -Math.abs(b.vy) * 0.9; bounced = true; }
+        if (bounced) { b.heading = Math.atan2(b.vy, b.vx); b.sx += (Math.random() - 0.5) * 0.8; }
+        b.sx += (b.bsx - b.sx) * spinRelax; b.sy += (b.bsy - b.sy) * spinRelax;
+        b.rx += b.sx * dt; b.ry += b.sy * dt;
         b.canvas._rot = [b.rx, b.ry];
         place(b);
       }
       mouse.px = mouse.x; mouse.py = mouse.y;
     };
 
-    let dropped = false;
+    let dropped = false, lastNow = 0;
     const loop = (now) => {
       if (!hero.isConnected) return;
+      const dt = lastNow ? Math.min(0.05, (now - lastNow) / 1000) : 1 / 60; // seconds, clamped after tab switches
+      lastNow = now;
       const nx = mouse.in ? mouse.x / W - 0.5 : 0, ny = mouse.in ? mouse.y / H - 0.5 : 0;
       const still = reduceMotion || !fine;
       for (const l of layers) {
@@ -403,7 +438,7 @@
       }
       wins.forEach(syncLens);
       if (!dropped && document.body.classList.contains("ready")) { dropped = true; setTimeout(drop, reduceMotion ? 0 : 900); }
-      if (!reduceMotion) stepClouds(now / 1000);
+      if (!reduceMotion) stepClouds(dt);
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
