@@ -176,13 +176,22 @@
       ${foot()}`,
 
     works: (filter) => `
-      <section class="section page-top" id="top" style="border-top:0">
+      <section class="section page-top works-page" id="top" style="border-top:0">
+        <div class="works-top">
         ${secHead("Work", "Games, side projects and photo series. Click anything to open it in a window.")}
+        <div class="works-controls">
+        <button class="pill ghost filter-toggle" type="button" aria-expanded="false" data-ftoggle><span class="ft-sum">Filters</span> ▾</button>
+        <div class="filter-panel">
         <div class="filters">
           <span class="label">(FILTER)</span>
           <div class="chips">${[["all", "All"], ["game", "Games"], ["photo", "Photography"], ["featured", "Featured"]].map(([k, l]) => `<button class="chip${k === filter ? " on" : ""}" type="button" data-filter="${k}">${l}</button>`).join("")}</div>
+          <span class="label">(VIEW)</span>
+          <div class="chips"><button class="chip" type="button" data-view="wheel">Wheel</button><button class="chip" type="button" data-view="grid">Grid</button></div>
+        </div>
         </div>
         <div class="count" id="count"></div>
+        </div>
+        </div>
         <div id="works-groups"></div>
       </section>
       ${foot()}`,
@@ -234,21 +243,152 @@
       ${foot()}`,
   };
 
-  // ---------- works grid + filter ----------
+  // ---------- works grid / card stream + filter ----------
   let workFilter = "all";
+  let workView = "wheel";
+  try { workView = localStorage.getItem("kv2-workview") || "wheel"; } catch {}
+  let stopHelix = null;
+  const two = (n) => String(n).padStart(2, "0");
+
+  // Card stream (after kidzfrmnowhere): one main image per project, tilted slabs flowing from far top-right to
+  // near bottom-left. It drifts on its own, scrolling pushes it along, hovering spotlights one card.
+  const GHOSTS = 5; // stacked copies behind each card = the slab thickness
+  const streamMarkup = (list) => `
+    <section class="stream" aria-label="Work stream">
+      <div class="stream-stick">
+        <div class="stream-world">${list.map((w, p) => {
+          const src = w.hero || w.cover;
+          const face = src ? `<img src="${esc(asset(src))}" alt="" decoding="async" draggable="false">` : tile(w);
+          const bg = src ? `background-image:url('${esc(asset(src))}')` : `background:${esc(w.accent || "var(--sky)")}`;
+          return `<a class="s-card" data-p="${p}" href="#/works/${slug(w.title)}" aria-label="${esc(w.title)}">
+            ${Array.from({ length: GHOSTS }, (_, k) => `<i class="s-ghost" style="${bg};--k:${k + 1}"></i>`).join("")}
+            <span class="s-face">${face}</span></a>`;
+        }).join("")}</div>
+        <div class="s-label" aria-hidden="true"></div>
+        <div class="helix-hud h-list"><div class="label">(Projects)</div>
+          <ol>${list.map((w, p) => `<li><a href="#/works/${slug(w.title)}" data-sp="${p}">${two(p + 1)} ${esc(w.title)}<b> ←</b></a></li>`).join("")}</ol></div>
+        <div class="helix-hud h-count">(${two(list.length)} projects)<br>hover to focus · click to open</div>
+      </div>
+    </section>`;
+
+  const initStream = (host, list) => {
+    const sec = host.querySelector(".stream");
+    if (!sec) return null;
+    const stick = sec.querySelector(".stream-stick");
+    const cards = [...sec.querySelectorAll(".s-card")];
+    const links = [...sec.querySelectorAll("[data-sp]")];
+    const label = sec.querySelector(".s-label");
+    const N = cards.length;
+    // per-card variety: base size and zigzag side
+    const vary = cards.map((_, i) => ({ s: 0.82 + ((i * 37) % 11) / 26, side: i % 2 ? 1 : -1 }));
+    let phase = 0, scrollPhase = 0, scrollTarget = 0, speed = 1, alive = true, last = performance.now(), hot = -1;
+
+    // Wheel view is a full-screen stage: wheel, trackpad, touch-drag and arrow keys drive the stream, not the page.
+    const push = (px) => { scrollTarget += px / (stick.clientHeight * 1.6); }; // ~1.6 screens of input per full cycle
+    const onWheel = (e) => { e.preventDefault(); push(e.deltaMode === 1 ? e.deltaY * 32 : e.deltaY); };
+    let touchY = null;
+    const onTouchStart = (e) => { touchY = e.touches[0].clientY; };
+    const onTouchMove = (e) => { if (touchY === null) return; e.preventDefault(); const y = e.touches[0].clientY; push((touchY - y) * 1.6); touchY = y; };
+    const onTouchEnd = () => { touchY = null; };
+    const onKey = (e) => {
+      if (e.target.closest?.("input, textarea") || !modal.hidden) return;
+      if (e.key === "ArrowDown" || e.key === "ArrowRight") { e.preventDefault(); push(120); }
+      if (e.key === "ArrowUp" || e.key === "ArrowLeft") { e.preventDefault(); push(-120); }
+    };
+    stick.addEventListener("wheel", onWheel, { passive: false });
+    stick.addEventListener("touchstart", onTouchStart, { passive: true });
+    stick.addEventListener("touchmove", onTouchMove, { passive: false });
+    stick.addEventListener("touchend", onTouchEnd);
+    addEventListener("keydown", onKey);
+
+    const focus = (p) => {
+      hot = p;
+      sec.classList.toggle("hovering", p >= 0);
+      cards.forEach((c, i) => c.classList.toggle("hot", i === p));
+      links.forEach((a) => a.classList.toggle("on", +a.dataset.sp === p));
+      label.textContent = p >= 0 ? `${list[p].title} — ${list[p].tag}` : "";
+      label.classList.toggle("on", p >= 0);
+    };
+    cards.forEach((c, i) => {
+      c.addEventListener("pointerenter", () => focus(i));
+      c.addEventListener("pointerleave", () => { if (hot === i) focus(-1); });
+    });
+    links.forEach((a) => {
+      a.addEventListener("pointerenter", () => focus(+a.dataset.sp));
+      a.addEventListener("pointerleave", () => focus(-1));
+    });
+    stick.addEventListener("pointermove", (e) => {
+      const r = stick.getBoundingClientRect();
+      const lx = e.clientX - r.left, flip = lx + 18 + label.offsetWidth > r.width - 12; // keep the label on screen
+      label.style.transform = `translate(${flip ? lx - 18 - label.offsetWidth : lx + 18}px, ${e.clientY - r.top - 6}px)`;
+    });
+
+    const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+    const frame = (now) => {
+      if (!alive || !sec.isConnected) return;
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      const r = stick.getBoundingClientRect();
+      if (r.bottom > 0 && r.top < innerHeight) {
+        // drift on its own; ease to a stop while a card is hovered so it can be clicked
+        speed += ((hot >= 0 ? 0 : 1) - speed) * (1 - Math.exp(-6 * dt));
+        if (!reduceMotion) phase += dt * 0.028 * speed;
+        scrollPhase += (scrollTarget - scrollPhase) * (1 - Math.exp(-8 * dt));
+        const W = stick.clientWidth, H = stick.clientHeight, mobile = W < 640;
+        const cw = mobile ? 230 : Math.max(300, Math.min(560, W * 0.36));
+        // path from far top-right to near bottom-left
+        const x0 = W * (mobile ? 0.62 : 0.72), y0 = -H * 0.12, z0 = -1700;
+        const x1 = W * (mobile ? 0.38 : 0.34), y1 = H * 1.12, z1 = 420;
+        for (let i = 0; i < N; i++) {
+          let u = (i / N + phase + scrollPhase) % 1;
+          if (u < 0) u += 1;
+          const e = u * u * (3 - 2 * u) * 0.35 + u * 0.65; // a little ease so cards linger mid-stream
+          const v = vary[i];
+          const x = x0 + (x1 - x0) * e + v.side * W * (mobile ? 0.12 : 0.11);
+          const y = y0 + (y1 - y0) * e;
+          const z = z0 + (z1 - z0) * e;
+          const o = smooth(0, 0.2, u) * (1 - smooth(0.82, 1, u));
+          const c = cards[i];
+          c.style.width = cw * v.s + "px";
+          c.style.height = cw * v.s * 0.6 + "px";
+          c.style.transform = `translate3d(${(x - (cw * v.s) / 2).toFixed(1)}px, ${(y - cw * v.s * 0.3).toFixed(1)}px, ${z.toFixed(1)}px) rotateX(24deg) rotateY(-16deg) rotateZ(3deg)`;
+          c.style.setProperty("--o", o.toFixed(3));
+          c.style.zIndex = String(Math.round(z + 3000));
+        }
+      }
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+    return () => { alive = false; removeEventListener("keydown", onKey); };
+  };
+
   const renderWorks = () => {
     const host = document.getElementById("works-groups");
     if (!host) return;
+    stopHelix?.();
+    stopHelix = null;
     const list = S.work.filter((w) => workFilter === "all" || (workFilter === "featured" ? w.featured || w.featuredPhoto : w.kind === workFilter));
-    // Games and photo sets get their own titled groups; empty groups are skipped.
-    const groups = [["game", "Game projects"], ["photo", "Photography sets"]]
-      .map(([kind, label]) => [label, list.filter((w) => w.kind === kind)])
-      .filter(([, items]) => items.length);
-    host.innerHTML = groups.map(([label, items]) => `
-      <div class="group-head fade"><h3>${esc(label)}</h3><span>(${String(items.length).padStart(2, "0")})</span></div>
-      <div class="works-grid">${items.map(workCard).join("")}</div>`).join("");
+    const wheel = workView === "wheel";
+    host.closest(".works-page")?.classList.toggle("wheel-mode", wheel);
+    document.body.classList.toggle("work-wheel", wheel);
+    if (wheel) scrollTo({ top: 0, behavior: "instant" });
+    if (wheel) {
+      host.innerHTML = streamMarkup(list);
+      stopHelix = initStream(host, list);
+    } else {
+      // Games and photo sets get their own titled groups; empty groups are skipped.
+      const groups = [["game", "Game projects"], ["photo", "Photography sets"]]
+        .map(([kind, label]) => [label, list.filter((w) => w.kind === kind)])
+        .filter(([, items]) => items.length);
+      host.innerHTML = groups.map(([label, items]) => `
+        <div class="group-head fade"><h3>${esc(label)}</h3><span>(${two(items.length)})</span></div>
+        <div class="works-grid">${items.map(workCard).join("")}</div>`).join("");
+    }
     document.getElementById("count").textContent = `(${list.length} PROJECTS)`;
     app.querySelectorAll("[data-filter]").forEach((b) => b.classList.toggle("on", b.dataset.filter === workFilter));
+    app.querySelectorAll("[data-view]").forEach((b) => b.classList.toggle("on", b.dataset.view === workView));
+    const sum = app.querySelector(".ft-sum");
+    if (sum) sum.textContent = `${{ all: "All", game: "Games", photo: "Photography", featured: "Featured" }[workFilter]} · ${workView === "wheel" ? "Wheel" : "Grid"}`;
     reveal();
   };
 
@@ -590,6 +730,9 @@
       if (page === "works") workFilter = query === "photo" ? "photo" : query === "game" ? "game" : "all";
       cleanups.forEach((fn) => fn());
       cleanups = [];
+      stopHelix?.();
+      stopHelix = null;
+      document.body.classList.remove("work-wheel");
       window.KGL?.unmount();
       app.innerHTML = pages[page](workFilter);
       window.KGL?.mount(app);
@@ -615,7 +758,18 @@
   // ---------- global handlers ----------
   document.addEventListener("click", (e) => {
     const f = e.target.closest("[data-filter]");
+    const ft = e.target.closest("[data-ftoggle]");
+    if (ft) {
+      const open = app.querySelector(".filter-panel")?.classList.toggle("open");
+      ft.setAttribute("aria-expanded", String(!!open));
+      return;
+    }
+    const closePanel = () => { app.querySelector(".filter-panel")?.classList.remove("open"); app.querySelector("[data-ftoggle]")?.setAttribute("aria-expanded", "false"); };
+    if (f || e.target.closest("[data-view]")) closePanel();
+    else if (!e.target.closest(".filter-panel")) closePanel();
     if (f) { workFilter = f.dataset.filter; renderWorks(); return; }
+    const v = e.target.closest("[data-view]");
+    if (v) { workView = v.dataset.view; try { localStorage.setItem("kv2-workview", workView); } catch {} renderWorks(); return; }
     if (e.target.closest("[data-mail]")) { e.preventDefault(); location.href = "mailto:" + S.email.user + "@" + S.email.domain; return; }
     if (e.target.closest("[data-top]")) { e.preventDefault(); scrollTo({ top: 0, behavior: "smooth" }); }
   });

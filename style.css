@@ -348,6 +348,67 @@ canvas[data-gl] { display: block; }
   .strip { grid-template-columns: repeat(3, 1fr); }
   .foot { flex-direction: column; align-items: start; }
 }
+/* ---------- Work page: compact full-screen stage in wheel mode ---------- */
+body.work-wheel { overflow: hidden; }
+body.work-wheel .foot { display: none; }
+.works-page.wheel-mode { height: 100vh; padding-top: 64px; display: flex; flex-direction: column; overflow: hidden; }
+/* header = title | controls centred under the nav pill | count, all on one row */
+.filter-toggle { display: none; }
+.wheel-mode .works-top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; padding: 0 calc(var(--gutter) + 8px); position: relative; z-index: 5; }
+.wheel-mode .works-controls { display: contents; }
+.wheel-mode .sec-head { grid-column: 1; padding: 14px 0 0; display: block; }
+.wheel-mode .sec-lede { display: none; }
+.wheel-mode .filter-panel { grid-column: 2; }
+.wheel-mode .filters { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; padding: 5px 6px 5px 14px; border: 1px solid var(--line-strong); border-radius: 999px; background: color-mix(in srgb, var(--bg) 82%, transparent); }
+.wheel-mode .filters .label { margin-right: 4px; }
+.wheel-mode .filters .label:not(:first-child) { margin-left: 12px; padding-left: 14px; border-left: 1px solid var(--line-strong); }
+.wheel-mode .count { grid-column: 3; justify-self: end; padding: 0; }
+.wheel-mode #works-groups { flex: 1; min-height: 0; position: relative; }
+.wheel-mode .stream { position: absolute; inset: 0; height: auto; margin: 0; }
+.wheel-mode .stream-stick { position: absolute; inset: 0; height: auto; touch-action: none; }
+.wheel-mode .h-list { top: 12px; }
+
+/* narrower screens: everything folds into one "Filters" toggle beside the title */
+@media (max-width: 900px) {
+  .wheel-mode .works-top { grid-template-columns: 1fr auto; }
+  .wheel-mode .filter-toggle { display: inline-flex; grid-column: 2; }
+  .wheel-mode .count { display: none; }
+  .wheel-mode .filter-panel { grid-column: 1 / -1; display: none; position: absolute; top: 100%; right: 0; left: 0; margin-top: 10px;
+    padding: 14px 16px 16px; background: var(--panel); border: 1px solid var(--line-strong); box-shadow: 0 18px 50px rgba(0, 0, 0, .45); }
+  .wheel-mode .filter-panel.open { display: block; animation: winIn .3s cubic-bezier(.2, .9, .3, 1.1) both; }
+  .wheel-mode .filters { flex-wrap: wrap; padding: 0; border: 0; border-radius: 0; background: none; gap: 8px; }
+  .wheel-mode .filters .label, .wheel-mode .filters .label:not(:first-child) { width: 100%; margin: 4px 0 0; padding: 0; border: 0; }
+}
+
+/* ---------- Work stream (angled card slabs) ---------- */
+.stream { position: relative; height: 260vh; margin-top: 18px; border-top: 1px solid var(--line); }
+.stream-stick { position: sticky; top: 0; height: 100vh; overflow: hidden; perspective: 1100px; perspective-origin: 62% 30%; }
+.stream-world { position: absolute; inset: 0; transform-style: preserve-3d; pointer-events: none; } /* cards sit behind this plane in 3D; let them get the pointer */
+.s-card { --o: 1; --dim: 1; pointer-events: auto; position: absolute; left: 0; top: 0; display: block; transform-style: preserve-3d; will-change: transform; }
+.s-face, .s-ghost { position: absolute; inset: 0; transition: opacity .35s ease; }
+.s-face { opacity: calc(var(--o) * var(--dim)); box-shadow: 0 30px 60px rgba(0, 0, 0, .55); overflow: hidden; }
+.s-face img, .s-face .gen-tile { width: 100%; height: 100%; object-fit: cover; box-shadow: none; }
+/* slab thickness: fading copies stacked behind the face, offset toward the far end of the stream */
+.s-ghost { background-size: cover; background-position: center; transform: translate3d(calc(var(--k) * 3px), calc(var(--k) * -5px), calc(var(--k) * -16px));
+  opacity: calc(var(--o) * var(--dim) * (.55 - var(--k) * .09)); filter: brightness(.55) blur(1px); }
+.stream.hovering .s-card:not(.hot) { --dim: .1; }
+.stream.hovering .s-card.hot { --dim: .94; }
+.s-label { position: absolute; left: 0; top: 0; z-index: 3; pointer-events: none; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--yolk); white-space: nowrap; opacity: 0; transition: opacity .2s; }
+.s-label.on { opacity: 1; }
+.helix-hud { position: absolute; z-index: 2; font-size: 11px; letter-spacing: .06em; }
+.h-list { left: 40px; top: 96px; }
+.h-list .label { margin-bottom: 8px; }
+.h-list ol { list-style: none; }
+.h-list a { display: inline-block; text-decoration: none; text-transform: uppercase; padding: 2px 0; opacity: .5; transition: opacity .2s; }
+.h-list a:hover, .h-list a.on { opacity: 1; }
+.h-list a b { font-weight: 400; visibility: hidden; }
+.h-list a.on b { visibility: visible; animation: blink 1s steps(1) infinite; }
+.h-count { right: 40px; bottom: 40px; text-align: right; color: var(--muted); text-transform: uppercase; line-height: 1.7; }
+@media (max-width: 640px) {
+  .h-list { display: none; }
+  .h-count { right: 16px; bottom: 20px; }
+}
+
 /* ---------- loading screen: console boot over CRT noise ---------- */
 #loader { position: fixed; inset: 0; z-index: 300; overflow: hidden; background: #070709; color: #e9e6f0; font-size: 10px; line-height: 1.45; letter-spacing: .06em; text-transform: uppercase; }
 #loader .ld-noise { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; opacity: .09; mix-blend-mode: screen; }
