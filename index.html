@@ -11,11 +11,16 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=6">
+  <link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
-  <!-- Loading screen: app.js fills the bar as hero images load, then drains it and starts the intro. -->
-  <div id="loader" aria-hidden="true"><div class="ld"><div class="ld-top"><span>LOADING...</span><span class="ld-pct">0%</span></div><div class="ld-bar"><i></i></div></div></div>
+  <!-- Loading screen: console boot text over CRT noise; app.js types it out as hero images load, then powers off into the intro. -->
+  <div id="loader" aria-hidden="true">
+    <canvas class="ld-noise"></canvas>
+    <div class="ld-crt"></div>
+    <div class="ld-console"><div class="ld-left"></div><div class="ld-right"></div></div>
+    <div class="ld-foot"><span>LOADING...</span><div class="ld-track"><i></i></div><span class="ld-pct">000%</span></div>
+  </div>
   <!-- Page chrome: frame, status bar, header -->
   <div class="frame" aria-hidden="true"></div>
   <div class="status">
@@ -26,7 +31,7 @@
     <a class="mark" href="#/" aria-label="Home"><img src="images/birbkit-256.jpg" alt=""><span id="mark-text">Henry Tan</span></a>
     <nav class="pill-nav">
       <a href="#/" data-page="home">Home</a>
-      <a href="#/works" data-page="works">Works</a>
+      <a href="#/works" data-page="works">Work</a>
       <a href="#/profile" data-page="profile">Profile</a>
       <a href="#/contact" data-page="contact">Contact</a>
     </nav>
@@ -45,6 +50,6 @@
   <!-- data.js, images/, assets/ and cv.html are synced from ../Portfolio by sync.ps1 — edit content there. -->
   <script src="data.js?v=2"></script>
   <script src="gl.js?v=2"></script>
-  <script src="app.js?v=6"></script>
+  <script src="app.js?v=10"></script>
 </body>
 </html>

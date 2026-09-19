@@ -111,7 +111,7 @@
         <canvas data-gl="vcr"></canvas>
         <div class="vcr-fallback">${reel.map((w, i) => (w.hero || w.cover ? `<img data-i="${i}" src="${esc(asset(w.hero || w.cover))}" alt="">` : `<div data-i="${i}">${tile(w)}</div>`)).join("")}</div>
         <div class="vcr-lines" aria-hidden="true"></div>
-        <div class="vcr-hud vcr-tl"><div class="rec"><i></i>Works</div>
+        <div class="vcr-hud vcr-tl"><div class="rec"><i></i>Work</div>
           <ol>${reel.map((w, i) => `<li><button type="button" data-reel="${i}">${i + 1}: ${esc(w.title)}<b> ←</b></button></li>`).join("")}</ol></div>
         <div class="vcr-hud vcr-tr">CH-<span class="vcr-ch">01</span> · SP</div>
         <div class="vcr-hud vcr-bl"><div class="play">PLAY ▶</div><div class="tc">00.00.00.00</div></div>
@@ -155,7 +155,7 @@
       </section>
 
       <section class="section">
-        ${secHead("Works", "Games first — live service, mobile and Roblox — then side projects. Scroll to play the tape.", ["All works", "#/works"])}
+        ${secHead("Work", "Games first — live service, mobile and Roblox — then side projects. Scroll to play the tape.", ["All work", "#/works"])}
         ${vcr()}
       </section>
 
@@ -177,13 +177,13 @@
 
     works: (filter) => `
       <section class="section page-top" id="top" style="border-top:0">
-        ${secHead("Works", "Games, side projects and photo series. Click anything to open it in a window.")}
+        ${secHead("Work", "Games, side projects and photo series. Click anything to open it in a window.")}
         <div class="filters">
           <span class="label">(FILTER)</span>
           <div class="chips">${[["all", "All"], ["game", "Games"], ["photo", "Photography"], ["featured", "Featured"]].map(([k, l]) => `<button class="chip${k === filter ? " on" : ""}" type="button" data-filter="${k}">${l}</button>`).join("")}</div>
         </div>
         <div class="count" id="count"></div>
-        <div class="works-grid" id="works-grid"></div>
+        <div id="works-groups"></div>
       </section>
       ${foot()}`,
 
@@ -237,11 +237,17 @@
   // ---------- works grid + filter ----------
   let workFilter = "all";
   const renderWorks = () => {
+    const host = document.getElementById("works-groups");
+    if (!host) return;
     const list = S.work.filter((w) => workFilter === "all" || (workFilter === "featured" ? w.featured || w.featuredPhoto : w.kind === workFilter));
-    const grid = document.getElementById("works-grid");
-    if (!grid) return;
-    grid.innerHTML = list.map(workCard).join("");
-    document.getElementById("count").textContent = `(${list.length} WORKS)`;
+    // Games and photo sets get their own titled groups; empty groups are skipped.
+    const groups = [["game", "Game projects"], ["photo", "Photography sets"]]
+      .map(([kind, label]) => [label, list.filter((w) => w.kind === kind)])
+      .filter(([, items]) => items.length);
+    host.innerHTML = groups.map(([label, items]) => `
+      <div class="group-head fade"><h3>${esc(label)}</h3><span>(${String(items.length).padStart(2, "0")})</span></div>
+      <div class="works-grid">${items.map(workCard).join("")}</div>`).join("");
+    document.getElementById("count").textContent = `(${list.length} PROJECTS)`;
     app.querySelectorAll("[data-filter]").forEach((b) => b.classList.toggle("on", b.dataset.filter === workFilter));
     reveal();
   };
@@ -566,7 +572,7 @@
       document.title = `${w.title} — ${S.name}`;
     } else {
       closeModal();
-      document.title = `${S.name} — ${page === "home" ? "Portfolio" : page[0].toUpperCase() + page.slice(1)}`;
+      document.title = `${S.name} — ${{ home: "Portfolio", works: "Work", profile: "Profile", contact: "Contact" }[page]}`;
     }
   };
   addEventListener("hashchange", route);
@@ -601,33 +607,152 @@
     dispatchEvent(new Event("kv2-theme"));
   });
 
-  // ---------- loading screen → intro ----------
+  // ---------- loading screen: console boot over CRT noise → intro ----------
   const runLoader = () => {
     const el = document.getElementById("loader");
     if (!el) return document.body.classList.add("ready");
-    const pct = el.querySelector(".ld-pct"), bar = el.querySelector(".ld-bar i");
+    const left = el.querySelector(".ld-left"), right = el.querySelector(".ld-right");
+    const pct = el.querySelector(".ld-pct"), fill = el.querySelector(".ld-track i");
+
+    // what we wait for: every eager image in the first render, plus web fonts
     const imgs = [...app.querySelectorAll("img")].filter((i) => i.loading !== "lazy");
     const jobs = [...imgs.map((i) => (i.complete ? Promise.resolve() : new Promise((r) => { i.addEventListener("load", r, { once: true }); i.addEventListener("error", r, { once: true }); }))), document.fonts.ready];
-    let done = 0, forced = false, shown = 0;
+    let done = 0, forced = false, shown = 0, complete = false;
     jobs.forEach((j) => j.then(() => done++));
-    setTimeout(() => { forced = true; }, 6000); // never hold the page hostage
-    const t0 = performance.now();
-    const frame = (now) => {
-      const target = forced ? 100 : (done / jobs.length) * 100;
-      shown = Math.min(target, shown + Math.max(0.7, (target - shown) * 0.12));
-      pct.textContent = Math.floor(shown) + "%";
-      bar.style.transform = `scaleX(${shown / 100})`;
-      if (shown >= 100 && now - t0 > 800) {
-        el.classList.add("drain");
-        setTimeout(() => { el.classList.add("out"); document.body.classList.add("ready"); }, 480);
-        setTimeout(() => el.remove(), 1100);
-        return;
-      }
-      requestAnimationFrame(frame);
+    setTimeout(() => { forced = true; }, 7000); // never hold the page hostage
+
+    // CRT static: low-res random grain, upscaled
+    const noise = el.querySelector(".ld-noise"), g = noise.getContext("2d");
+    const sizeNoise = () => { noise.width = Math.ceil(innerWidth / 3); noise.height = Math.ceil(innerHeight / 3); };
+    sizeNoise();
+    let lastNoise = 0;
+    const drawNoise = (now) => {
+      if (now - lastNoise < 45) return;
+      lastNoise = now;
+      const img = g.createImageData(noise.width, noise.height), d = img.data;
+      for (let i = 0; i < d.length; i += 4) { const v = (Math.random() * 255) | 0; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; }
+      g.putImageData(img, 0, 0);
     };
+
+    // console text, filled with real site data
+    const ua = navigator.userAgent;
+    const browser = /Edg\//.test(ua) ? "EDGE" : /OPR\//.test(ua) ? "OPERA" : /Firefox\//.test(ua) ? "FIREFOX" : /Chrome\//.test(ua) ? "CHROME" : /Safari\//.test(ua) ? "SAFARI" : "UNKNOWN";
+    const two = (n) => String(n).padStart(2, "0");
+    const now = () => new Date();
+    const years = (S.stats.find(([, l]) => /years/i.test(l)) || ["", ""])[0];
+    const steps = ["LOAD PORTFOLIO DATA", "MOUNT DESKTOP WINDOWS", "COMPILE WEBGL SHADERS", "CALIBRATE CLOUD PHYSICS", "SPOOL VCR TAPE", "SYNC VANCOUVER CLOCK", "WAKE BIRBKIT"];
+    const progress = () => (forced ? 100 : (done / jobs.length) * 100);
+    const leftLines = [
+      "CONSOLE SETUP", "-------------",
+      () => `LOADING SITE : ${complete ? "COMPLETE" : "IN PROGRESS"}`,
+      "SETTING TYPE : {IBM PLEX MONO}",
+      "SETTING COLOR : {#0E0D12; #EEEAF5}",
+      `SERVER : {${(location.hostname || "LOCALHOST").toUpperCase()}}`,
+      `PROTOCOL : {${location.protocol.replace(":", "").toUpperCase()}}`,
+      "",
+      ...steps.map((s, i) => () => `${String(i + 1).padStart(3, "0")} ${s}${shown >= ((i + 1) / steps.length) * 100 - 0.01 ? " ..... OK" : " ....."}`),
+      "",
+      `WELCOME TO ${S.name.toUpperCase()}`, "-------------",
+      `ROLE : {${S.role.toUpperCase()}}`,
+      `STUDIO : {${String(S.cv.experience[0]?.org || "").toUpperCase()}}`,
+      `EXPERIENCE : {${years} YEARS}`,
+      `LOCATION : {${S.location.toUpperCase()}}`,
+      "FOCUS : {TECHNICAL DESIGN, CONTENT DESIGN, LIVE OPS}",
+    ];
+    const rightLines = [
+      "PARSING DATA", "-------------",
+      () => { const d = now(); return `DATE : {${two(d.getDate())}/${two(d.getMonth() + 1)}/${two(d.getFullYear() % 100)}}`; },
+      () => { const d = now(); return `HOUR : {${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}}`; },
+      () => `LOADING ASSETS : {${two(forced ? jobs.length : done)} / ${two(jobs.length)}}`,
+      `PROJECTS : {${two(S.work.length)}}`,
+      "",
+      () => `DISPLAY : {${innerWidth}X${innerHeight}}`,
+      `BROWSER : {${browser}}`,
+      `LANGUAGE : {${(navigator.language || "en").toUpperCase()}}`,
+    ];
+
+    // typewriter with a short scramble ahead of the cursor; dynamic lines keep updating once typed
+    const GLYPHS = "#%&*+-/<>=[]{}01ABCDEF";
+    const rows = [];
+    const mount = (host, lines, start) => lines.forEach((ln, i) => {
+      const div = document.createElement("div");
+      host.appendChild(div);
+      rows.push({ div, ln, at: start + i * (reduceMotion ? 0 : 55), typed: false });
+    });
+    const t0 = performance.now();
+    mount(left, leftLines, 0);
+    mount(right, rightLines, 450);
+    const text = (ln) => (typeof ln === "function" ? ln() : ln);
+    const renderRows = (now) => {
+      let allTyped = true;
+      for (const r of rows) {
+        const age = now - t0 - r.at;
+        if (age < 0) { allTyped = false; continue; }
+        const full = text(r.ln);
+        if (!r.typed) {
+          const k = Math.floor((age / 240) * full.length);
+          if (k >= full.length) r.typed = true;
+          else {
+            allTyped = false;
+            let tail = "";
+            for (let j = 0; j < Math.min(3, full.length - k); j++) tail += full[k + j] === " " ? " " : GLYPHS[(Math.random() * GLYPHS.length) | 0];
+            r.div.textContent = full.slice(0, k) + tail;
+            continue;
+          }
+        }
+        if (r.div.textContent !== full) r.div.textContent = full;
+      }
+      return allTyped;
+    };
+
+    // the bar follows whichever is slower: real asset loading or the console typing out
+    const typingEnd = Math.max(...rows.map((r) => r.at)) + 240;
+    const frame = (now) => {
+      const typedPct = reduceMotion ? 100 : Math.min(100, ((now - t0) / typingEnd) * 100);
+      const target = Math.min(progress(), typedPct);
+      shown = Math.min(target, shown + Math.max(0.4, (target - shown) * 0.15));
+      pct.textContent = String(Math.floor(shown)).padStart(3, "0") + "%";
+      fill.style.width = shown + "%";
+      drawNoise(now);
+      const typed = renderRows(now);
+      if (!complete && shown >= 100 && typed) {
+        complete = true; // flips LOADING SITE to COMPLETE
+        setTimeout(() => {
+          // start the intro in the same frame as the CRT power-off, so the page under the collapsing
+          // screen is already in its hidden starting state (no flash of the finished page)
+          document.body.classList.add("ready");
+          el.classList.add("off");
+        }, 500);
+        setTimeout(() => el.remove(), 1150);
+      }
+      if (el.isConnected) requestAnimationFrame(frame);
+    };
+    addEventListener("resize", sizeNoise);
     requestAnimationFrame(frame);
   };
 
+  // ---------- cursor readout: X:Y coordinates, "GRAB" over draggable title bars ----------
+  const initCursorHud = () => {
+    if (!matchMedia("(pointer: fine)").matches) return;
+    const hud = document.createElement("div");
+    hud.id = "cursor-hud";
+    hud.setAttribute("aria-hidden", "true");
+    hud.innerHTML = '<span class="c-xy"></span><span class="c-state">GRAB</span>';
+    document.body.appendChild(hud);
+    const xy = hud.querySelector(".c-xy");
+    const pad = (n) => String(Math.max(0, Math.round(n))).padStart(4, "0");
+    addEventListener("pointermove", (e) => {
+      if (e.pointerType !== "mouse") return;
+      hud.style.transform = `translate(${e.clientX + 16}px, ${e.clientY + 18}px)`;
+      xy.textContent = `X:${pad(e.clientX)} Y:${pad(e.clientY)}`;
+      const onBar = e.target.closest?.(".float-win .win-bar") && !e.target.closest("[data-winclose]");
+      hud.classList.toggle("grab", !!onBar || !!document.querySelector(".float-win.dragging"));
+      hud.classList.add("on");
+    }, { passive: true });
+    document.documentElement.addEventListener("pointerleave", () => hud.classList.remove("on"));
+  };
+
   route();
+  initCursorHud();
   runLoader();
 })();
