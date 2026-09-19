@@ -11,14 +11,18 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=25">
+  <link rel="stylesheet" href="style.css?v=29">
 </head>
 <body>
-  <!-- Loading screen: console boot text over CRT noise; app.js types it out as hero images load, then powers off into the intro. -->
+  <!-- Loading screen: console boot text over CRT noise with a centre bar; at 100% the bar folds into an "H" and the view zooms through it into the intro. -->
   <div id="loader" aria-hidden="true">
     <canvas class="ld-noise"></canvas>
     <div class="ld-crt"></div>
     <div class="ld-console"><div class="ld-left"></div><div class="ld-right"></div></div>
+    <div class="ld-center">
+      <div class="ld-bar"><i class="ld-fill"></i><b class="seg seg-l"></b><b class="seg seg-m"></b><b class="seg seg-r"></b></div>
+      <div class="ld-cap"><span>LOADING...</span><span class="ld-pct">000%</span></div>
+    </div>
     <div class="ld-foot"><span>LOADING...</span><div class="ld-track"><i></i></div><span class="ld-pct">000%</span></div>
   </div>
   <!-- Page chrome: frame, status bar, header -->
@@ -53,6 +57,6 @@
   <!-- data.js, images/, assets/ and cv.html are synced from ../Portfolio by sync.ps1 — edit content there. -->
   <script src="data.js?v=2"></script>
   <script src="gl.js?v=8"></script>
-  <script src="app.js?v=32"></script>
+  <script src="app.js?v=35"></script>
 </body>
 </html>

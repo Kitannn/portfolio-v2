@@ -100,7 +100,7 @@
   // Cloud homes as fractions of the hero; physics in initHero pushes them around and springs them back.
   const cloudHomes = [{ x: 0.1, y: 0.16, w: 132 }, { x: 0.93, y: 0.1, w: 112 }, { x: 0.5, y: 0.92, w: 150 }, { x: 0.86, y: 0.78, w: 116 }];
   const clouds = () => `<div class="cloud-layer" aria-hidden="true">${cloudHomes.map((c, i) => `
-    <div class="cloud" data-hx="${c.x}" data-hy="${c.y}" style="width:${c.w}px"><canvas data-gl="cloud" data-seed="${(i * 1.7).toFixed(1)}"></canvas><i></i><i></i><i></i><i></i></div>`).join("")}</div>`;
+    <div class="cloud" data-hx="${c.x}" data-hy="${c.y}" style="--cw:${c.w}px"><canvas data-gl="cloud" data-seed="${(i * 1.7).toFixed(1)}"></canvas><i></i><i></i><i></i><i></i></div>`).join("")}</div>`;
 
   // ---------- VCR works reel ----------
   const reel = S.work.filter((w) => w.featured);
@@ -873,7 +873,7 @@
     const el = document.getElementById("loader");
     if (!el) return document.body.classList.add("ready");
     const left = el.querySelector(".ld-left"), right = el.querySelector(".ld-right");
-    const pct = el.querySelector(".ld-pct"), fill = el.querySelector(".ld-track i");
+    const pcts = [...el.querySelectorAll(".ld-pct")], fills = [...el.querySelectorAll(".ld-fill, .ld-track i")], bar = el.querySelector(".ld-bar");
 
     // what we wait for: every eager image in the first render, plus web fonts
     const imgs = [...app.querySelectorAll("img")].filter((i) => i.loading !== "lazy");
@@ -975,24 +975,46 @@
       const typedPct = reduceMotion ? 100 : Math.min(100, ((now - t0) / typingEnd) * 100);
       const target = Math.min(progress(), typedPct);
       shown = Math.min(target, shown + Math.max(25 * dt, (target - shown) * (1 - Math.exp(-9 * dt))));
-      pct.textContent = String(Math.floor(shown)).padStart(3, "0") + "%";
-      fill.style.width = shown + "%";
+      pcts.forEach((p) => { p.textContent = String(Math.floor(shown)).padStart(3, "0") + "%"; }); // centre bar + bottom track
+      fills.forEach((f) => { f.style.width = shown + "%"; });
       drawNoise(now);
       const typed = renderRows(now);
       if (!complete && shown >= 100 && typed) {
         complete = true; // flips LOADING SITE to COMPLETE
-        setTimeout(() => {
-          // start the intro in the same frame as the CRT power-off, so the page under the collapsing
-          // screen is already in its hidden starting state (no flash of the finished page)
-          document.body.classList.add("ready");
-          el.classList.add("off");
-        }, 500);
-        setTimeout(() => el.remove(), 1150);
+        if (reduceMotion) {
+          setTimeout(() => { document.body.classList.add("ready"); el.style.transition = "opacity .4s"; el.style.opacity = "0"; }, 300);
+          setTimeout(() => el.remove(), 800);
+        } else {
+          setTimeout(() => el.classList.add("fold"), 350); // bar splits and folds into an H
+          setTimeout(zoomThroughH, 350 + 650);
+        }
       }
       if (el.isConnected) requestAnimationFrame(frame);
     };
     addEventListener("resize", sizeNoise);
     requestAnimationFrame(frame);
+
+    const zoomThroughH = () => {
+      // intro starts now, so the page seen through the H is already in its hidden starting state
+      document.body.classList.add("ready");
+      const b = bar.getBoundingClientRect();
+      const a = b.width / 3, t = b.height, half = (a * 1.35) / 2; // segment length, thickness, upright half-height
+      const cx = b.left + b.width / 2, cy = b.top + b.height / 2;  // zoom focus: crossbar centre
+      const x0 = b.left + a - t / 2, x1 = b.left + 2 * a + t / 2, y0 = cy - half, y1 = cy + half;
+      const pts = [[x0, y0], [x0 + t, y0], [x0 + t, cy - t / 2], [x1 - t, cy - t / 2], [x1 - t, y0], [x1, y0],
+        [x1, y1], [x1 - t, y1], [x1 - t, cy + t / 2], [x0 + t, cy + t / 2], [x0 + t, y1], [x0, y1]];
+      const W = innerWidth, H = innerHeight, t0 = performance.now(), DUR = 900;
+      const MAX = (Math.max(W, H) * 2.2) / t; // big enough that the crossbar alone covers the screen
+      const step = (now) => {
+        const k = Math.min(1, (now - t0) / DUR), e = k * k * k * k; // ease-in: slow start, fast rush
+        const s = Math.exp(Math.log(MAX) * e);
+        const h = pts.map(([x, y], i) => `${i ? "L" : "M"}${(cx + (x - cx) * s).toFixed(1)} ${(cy + (y - cy) * s).toFixed(1)}`).join("");
+        el.style.clipPath = `path(evenodd, "M0 0H${W}V${H}H0Z${h}Z")`;
+        if (k < 1) requestAnimationFrame(step);
+        else el.remove();
+      };
+      requestAnimationFrame(step);
+    };
   };
 
   // ---------- cursor readout: X:Y coordinates, "GRAB" over draggable title bars ----------

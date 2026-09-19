@@ -141,7 +141,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 /* clouds */
 .cloud-layer { position: absolute; inset: 0; z-index: 900; pointer-events: none; }
 .cloud {
-  position: absolute; left: 0; top: 0; width: 150px; aspect-ratio: 1.2; pointer-events: none; will-change: transform;
+  position: absolute; left: 0; top: 0; width: var(--cw, 150px); aspect-ratio: 1.2; pointer-events: none; will-change: transform;
   filter: drop-shadow(0 12px 18px rgba(0, 0, 0, .28));
 }
 .cloud i {
@@ -430,19 +430,38 @@ body.work-wheel .foot { display: none; }
 .ld-left div, .ld-right div { min-height: 1.45em; white-space: pre-wrap; }
 .ld-left div:nth-child(8), .ld-left div:nth-child(16) { margin-bottom: 2.2em; }
 .ld-right { position: absolute; right: 56px; bottom: 96px; width: min(300px, 40vw); }
-.ld-foot { position: absolute; left: 56px; right: 56px; bottom: 32px; display: flex; align-items: center; gap: 14px; }
+/* centre bar: grey track + white fill; at 100% it splits into three segments and folds into an H */
+.ld-center { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2; display: flex; flex-direction: column; align-items: center; gap: 18px; }
+.ld-bar { position: relative; width: 180px; height: 14px; background: rgba(233, 230, 240, .16); transition: background .2s; }
+.ld-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: #e9e6f0; }
+.seg { position: absolute; top: 0; width: 33.334%; height: 100%; background: #e9e6f0; opacity: 0; transition: transform .55s cubic-bezier(.7, 0, .2, 1.25); }
+.seg-l { left: 0; } .seg-m { left: 33.333%; } .seg-r { left: 66.666%; }
+.ld-cap { display: flex; gap: 16px; font-size: 10px; letter-spacing: .1em; transition: opacity .3s; }
+#loader.fold .ld-bar { background: transparent; }
+#loader.fold .ld-fill { opacity: 0; }
+#loader.fold .seg { opacity: 1; }
+#loader.fold .seg-l { transform: translateX(50%) rotate(90deg) scaleX(1.35); }   /* swing up into the left upright */
+#loader.fold .seg-r { transform: translateX(-50%) rotate(-90deg) scaleX(1.35); } /* and the right upright */
+#loader.fold .ld-cap, #loader.fold .ld-foot { opacity: 0; }
+/* bottom dotted track (kept alongside the centre bar) */
+.ld-foot { position: absolute; left: 56px; right: 56px; bottom: 32px; display: flex; align-items: center; gap: 14px; transition: opacity .3s; }
 .ld-track { position: relative; flex: 1; height: 8px; background: repeating-linear-gradient(90deg, rgba(233, 230, 240, .22) 0 1px, transparent 1px 5px); }
 .ld-track i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: repeating-linear-gradient(90deg, #e9e6f0 0 1px, transparent 1px 5px); }
-#loader.off { animation: crtOff .6s cubic-bezier(.7, 0, .3, 1) forwards; }
-@keyframes crtOff {
-  0% { transform: scale(1, 1); filter: brightness(1); }
-  55% { transform: scale(1, .004); filter: brightness(4); }
-  100% { transform: scale(0, .004); filter: brightness(6); opacity: 0; }
-}
+#loader.fold .ld-console { animation: none; opacity: 0; transition: opacity .3s; }
 @media (max-width: 640px) {
   .ld-console { padding: 28px 20px; font-size: 8.5px; }
   .ld-right { position: static; width: auto; margin-top: 1.5em; }
   .ld-foot { left: 20px; right: 20px; bottom: 22px; }
+  .cloud { width: calc(var(--cw, 150px) * .65); } /* smaller clouds on phones so they don't swamp the windows */
+  .ld-right { display: none; }                 /* phones: keep the centre bar clear of the stacked console text */
+  .ld-center { top: 66%; }
+}
+@media (max-height: 520px) and (min-width: 641px) {
+  .ld-console { padding: 18px 28px; font-size: 8.5px; line-height: 1.3; }
+  .ld-left div:nth-child(8), .ld-left div:nth-child(16) { margin-bottom: 1em; }
+  .ld-right { display: none; }
+  .ld-center { left: 72%; }
+  .ld-foot { bottom: 14px; }
 }
 
 /* ---------- CRT overlay (every page) ---------- */
