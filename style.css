@@ -443,6 +443,12 @@ body.work-wheel .foot { display: none; }
 #loader.fold .seg-l { transform: translateX(50%) rotate(90deg) scaleX(1.35); }   /* swing up into the left upright */
 #loader.fold .seg-r { transform: translateX(-50%) rotate(-90deg) scaleX(1.35); } /* and the right upright */
 #loader.fold .ld-cap, #loader.fold .ld-foot { opacity: 0; }
+/* then the white H fades into the dark screen (noise + scanlines show through), leaving only its outline */
+#loader.hfade .seg { background: rgba(233, 230, 240, 0); transition: transform .55s cubic-bezier(.7, 0, .2, 1.25), background-color .45s ease; }
+/* outline around the H hole while zooming through it (like the page-transition words) */
+.ld-hedge { position: fixed; inset: 0; z-index: 301; pointer-events: none; }
+.ld-hedge svg { width: 100%; height: 100%; display: block; }
+.ld-hedge path { fill: none; stroke: #e9e6f0; stroke-opacity: .55; stroke-width: 1.5; }
 /* bottom dotted track (kept alongside the centre bar) */
 .ld-foot { position: absolute; left: 56px; right: 56px; bottom: 32px; display: flex; align-items: center; gap: 14px; transition: opacity .3s; }
 .ld-track { position: relative; flex: 1; height: 8px; background: repeating-linear-gradient(90deg, rgba(233, 230, 240, .22) 0 1px, transparent 1px 5px); }
@@ -463,6 +469,11 @@ body.work-wheel .foot { display: none; }
   .ld-center { left: 72%; }
   .ld-foot { bottom: 14px; }
 }
+
+/* ---------- page transition: letter-shaped window in a CRT screen, zooming out, morphing, zooming in ---------- */
+#pt { position: fixed; inset: 0; z-index: 250; display: none; color: var(--fg); }
+#pt.on { display: block; } /* also swallows clicks mid-transition */
+#pt svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 
 /* ---------- CRT overlay (every page) ---------- */
 #crt { position: fixed; inset: 0; z-index: 85; pointer-events: none; opacity: 0; transition: opacity .5s; }

@@ -787,35 +787,124 @@
   const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } }), { threshold: 0.08 });
   const reveal = () => app.querySelectorAll(".fade:not(.in)").forEach((el) => io.observe(el));
 
+  // ---------- page transition: zoom out to this page's letter, morph it into the next page's, zoom in through that ----------
+  // Same look as the intro's H: a dark, noisy CRT screen with a letter-shaped window cut out of it and a thin outline.
+  // Letters are blocky, built from 5 rects each (in a 5x6 box, stroke 1) so any letter can morph into any other.
+  // Unused slots are zero-size rects tucked inside a stroke. Rects overlap rather than abut, so the union has no seams.
+  const PAGE_LETTERS = { home: "H", works: "W", profile: "P", contact: "C" };
+  const GLYPHS_PT = {
+    H: { rects: [[0, 0, 1, 6], [4, 0, 1, 6], [0.5, 2.5, 4, 1], [2.5, 3, 0, 0], [4.5, 5.5, 0, 0]], focus: [2.5, 3] },   // crossbar, like the intro
+    W: { rects: [[0, 0, 1, 6], [4, 0, 1, 6], [0, 5, 5, 1], [2, 2.5, 1, 3.5], [4.5, 5.5, 0, 0]], focus: [2.5, 4] },     // middle upright
+    P: { rects: [[0, 0, 1, 6], [4, 0, 1, 3.5], [0, 2.5, 5, 1], [0, 0, 5, 1], [4.5, 3, 0, 0]], focus: [2.5, 3] },       // bowl's lower bar
+    C: { rects: [[0, 0, 1, 6], [4, 0, 1, 1.8], [0, 5, 5, 1], [0, 0, 5, 1], [4, 4.2, 1, 1.8]], focus: [0.5, 3] },       // spine
+  };
+  const SVGNS = "http://www.w3.org/2000/svg";
+  let pt = null;
+  const ptLayer = () => {
+    if (pt) return pt;
+    // CRT noise tile (3px grains over the loader's near-black, with scanlines), jittered each frame like static
+    const T = 384, c = document.createElement("canvas");
+    c.width = c.height = T;
+    const g = c.getContext("2d"), img = g.createImageData(T, T), d = img.data;
+    for (let y = 0; y < T; y += 3) for (let x = 0; x < T; x += 3) {
+      const v = 7 + Math.random() * 23;
+      for (let j = 0; j < 3; j++) for (let i = 0; i < 3; i++) {
+        const p = ((y + j) * T + x + i) * 4, line = (y + j) % 3 === 0 ? 0.65 : 1;
+        d[p] = d[p + 1] = d[p + 2] = v * line; d[p + 3] = 255;
+      }
+    }
+    g.putImageData(img, 0, 0);
+    const el = document.createElement("div");
+    el.id = "pt";
+    el.setAttribute("aria-hidden", "true");
+    el.innerHTML = `<svg xmlns="${SVGNS}" preserveAspectRatio="none"><defs>
+        <pattern id="pt-noise" patternUnits="userSpaceOnUse" width="${T}" height="${T}"><image href="${c.toDataURL()}" width="${T}" height="${T}"/></pattern>
+        <radialGradient id="pt-vig"><stop offset=".55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".7"/></radialGradient>
+        <mask id="pt-mask" maskUnits="userSpaceOnUse"><rect class="pt-full" fill="#fff"/><g class="pt-holes" fill="#000"></g></mask></defs>
+      <g mask="url(#pt-mask)"><rect class="pt-full" fill="url(#pt-noise)"/><rect class="pt-full" fill="url(#pt-vig)"/>
+        <g class="pt-edges" fill="none" stroke="#e9e6f0" stroke-opacity=".55" stroke-width="3"></g></g></svg>`;
+    document.body.appendChild(el);
+    const mk = (host) => Array.from({ length: 5 }, () => host.appendChild(document.createElementNS(SVGNS, "rect")));
+    pt = { el, svg: el.querySelector("svg"), noise: el.querySelector("#pt-noise"), rects: [...el.querySelectorAll(".pt-full")], holes: mk(el.querySelector(".pt-holes")), edges: mk(el.querySelector(".pt-edges")) };
+    return pt;
+  };
+  const pageTransition = (from, to, swap, done) => {
+    const L = ptLayer(), W = document.documentElement.clientWidth, H = document.documentElement.clientHeight; // viewport minus scrollbar, same box as the layer
+    const A = GLYPHS_PT[from], B = GLYPHS_PT[to];
+    const u = Math.min(20, Math.max(13, Math.min(W, H) * 0.022)); // stroke thickness in px (the intro's H is 14)
+    const MAX = (Math.max(W, H) * 2.4) / u;                        // one stroke covers the screen
+    let vw = 0, vh = 0, ox = 0, oy = 0;
+    // draw letter rects (mix 0 = A, 1 = B) scaled by s around focus point f (letter units)
+    const draw = (rects, s, f) => {
+      // re-measure every frame: the scrollbar can come or go when the page swaps underneath
+      const cw = document.documentElement.clientWidth, ch = document.documentElement.clientHeight;
+      if (cw !== vw || ch !== vh) {
+        vw = cw; vh = ch;
+        L.svg.setAttribute("viewBox", `0 0 ${vw} ${vh}`);
+        L.rects.forEach((r) => { r.setAttribute("width", vw); r.setAttribute("height", vh); });
+        ox = vw / 2 - 2.5 * u; oy = vh / 2 - 3 * u;                  // letter box, centred
+      }
+      const fx = ox + f[0] * u, fy = oy + f[1] * u;
+      rects.forEach(([x, y, w, h], i) => {
+        const X = fx + (ox + x * u - fx) * s, Y = fy + (oy + y * u - fy) * s, Wd = w * u * s, Ht = h * u * s;
+        const on = w > 0.02 && h > 0.02;
+        for (const r of [L.holes[i], L.edges[i]]) {
+          r.setAttribute("x", X); r.setAttribute("y", Y); r.setAttribute("width", Math.max(0, Wd)); r.setAttribute("height", Math.max(0, Ht));
+          r.style.display = on ? "" : "none";
+        }
+      });
+    };
+    const mix = (k) => A.rects.map((a, i) => a.map((v, j) => v + (B.rects[i][j] - v) * k));
+    const OUT = 520, HOLD = 90, MORPH = 440, HOLD2 = 110, IN = 800, t0 = performance.now();
+    const M0 = OUT + HOLD, M1 = M0 + MORPH, I0 = M1 + HOLD2;
+    let swapped = false, lastJit = 0;
+    draw(A.rects, MAX, A.focus);
+    L.el.classList.add("on");
+    const step = (now) => {
+      const t = now - t0;
+      if (now - lastJit > 45) { lastJit = now; L.noise.setAttribute("x", (Math.random() * 384) | 0); L.noise.setAttribute("y", (Math.random() * 384) | 0); }
+      if (t < OUT) {
+        const k = 1 - Math.pow(1 - t / OUT, 3);                        // ease-out: rush out, settle on the letter
+        draw(A.rects, Math.exp(Math.log(MAX) * (1 - k)), A.focus);
+      } else if (t < I0 || !swapped) {
+        if (!swapped && t >= M0) { swapped = true; swap(); }            // new page appears behind the morphing letter
+        const k = Math.min(1, Math.max(0, (t - M0) / MORPH)), e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+        draw(mix(e), 1, A.focus);
+      } else if (t < I0 + IN) {
+        const k = (t - I0) / IN, e = k * k * k * k;                    // ease-in like the intro: slow start, fast rush
+        draw(B.rects, Math.exp(Math.log(MAX) * e), B.focus);
+      } else {
+        L.el.classList.remove("on");
+        return done();
+      }
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  };
+
   // ---------- router ----------
   let current = "";
+  let transitioning = false, pendingRoute = false;
   const closeToPage = () => { location.hash = current === "home" ? "#/" : `#/${current}`; };
-  const route = () => {
-    const raw = location.hash.replace(/^#\/?/, "");
-    let [path, query] = raw.split("?");
-    let [page, id] = path.split("/");
-    if (page === "work") page = "works"; // old-site links
-    if (!pages[page]) page = "home";
-    if (page === "works" && id && current) page = current; // keep whatever page the window was opened over
-    if (page !== current) {
-      current = page;
-      if (page === "works") workFilter = query === "photo" ? "photo" : query === "game" ? "game" : "all";
-      cleanups.forEach((fn) => fn());
-      cleanups = [];
-      stopHelix?.();
-      stopHelix = null;
-      document.body.classList.remove("work-wheel");
-      window.KGL?.unmount();
-      app.innerHTML = pages[page](workFilter);
-      window.KGL?.mount(app);
-      document.querySelectorAll(".pill-nav a").forEach((a) => a.classList.toggle("active", a.dataset.page === page));
-      if (page === "works") renderWorks();
-      initWarps();
-      initHero();
-      initVcr();
-      reveal();
-      if (!id) scrollTo({ top: 0, behavior: "instant" });
-    }
+  const renderPage = (page, id, query) => {
+    if (page === "works") workFilter = query === "photo" ? "photo" : query === "game" ? "game" : "all";
+    cleanups.forEach((fn) => fn());
+    cleanups = [];
+    stopHelix?.();
+    stopHelix = null;
+    document.body.classList.remove("work-wheel");
+    window.KGL?.unmount();
+    app.innerHTML = pages[page](workFilter);
+    window.KGL?.mount(app);
+    document.querySelectorAll(".pill-nav a").forEach((a) => a.classList.toggle("active", a.dataset.page === page));
+    if (page === "works") renderWorks();
+    initWarps();
+    initHero();
+    initVcr();
+    reveal();
+    if (!id) scrollTo({ top: 0, behavior: "instant" });
+  };
+  const settleModal = (page, id) => {
     const w = id && S.work.find((x) => slug(x.title) === id);
     if (w) {
       openModal(w);
@@ -824,6 +913,33 @@
       closeModal();
       document.title = `${S.name} — ${{ home: "Portfolio", works: "Work", profile: "Profile", contact: "Contact" }[page]}`;
     }
+  };
+  const route = () => {
+    if (transitioning) { pendingRoute = true; return; }
+    const raw = location.hash.replace(/^#\/?/, "");
+    let [path, query] = raw.split("?");
+    let [page, id] = path.split("/");
+    if (page === "work") page = "works"; // old-site links
+    if (!pages[page]) page = "home";
+    if (page === "works" && id && current) page = current; // keep whatever page the window was opened over
+    if (page !== current) {
+      // switching pages after the first load: zoom out to this page's letter, morph it, zoom into the next
+      if (current && !reduceMotion && !document.getElementById("loader")) {
+        transitioning = true;
+        pageTransition(PAGE_LETTERS[current], PAGE_LETTERS[page], () => {
+          current = page;
+          renderPage(page, id, query);
+          settleModal(page, id);
+        }, () => {
+          transitioning = false;
+          if (pendingRoute) { pendingRoute = false; route(); }
+        });
+        return;
+      }
+      current = page;
+      renderPage(page, id, query);
+    }
+    settleModal(page, id);
   };
   addEventListener("hashchange", route);
 
@@ -986,7 +1102,7 @@
           setTimeout(() => el.remove(), 800);
         } else {
           setTimeout(() => el.classList.add("fold"), 350); // bar splits and folds into an H
-          setTimeout(zoomThroughH, 350 + 650);
+          setTimeout(fadeH, 350 + 600);
         }
       }
       if (el.isConnected) requestAnimationFrame(frame);
@@ -994,26 +1110,39 @@
     addEventListener("resize", sizeNoise);
     requestAnimationFrame(frame);
 
-    const zoomThroughH = () => {
-      // intro starts now, so the page seen through the H is already in its hidden starting state
-      document.body.classList.add("ready");
+    // the folded white H fades into the dark, noisy screen (its outline stays), then we zoom through it
+    const fadeH = () => {
       const b = bar.getBoundingClientRect();
       const a = b.width / 3, t = b.height, half = (a * 1.35) / 2; // segment length, thickness, upright half-height
       const cx = b.left + b.width / 2, cy = b.top + b.height / 2;  // zoom focus: crossbar centre
       const x0 = b.left + a - t / 2, x1 = b.left + 2 * a + t / 2, y0 = cy - half, y1 = cy + half;
       const pts = [[x0, y0], [x0 + t, y0], [x0 + t, cy - t / 2], [x1 - t, cy - t / 2], [x1 - t, y0], [x1, y0],
         [x1, y1], [x1 - t, y1], [x1 - t, cy + t / 2], [x0 + t, cy + t / 2], [x0 + t, y1], [x0, y1]];
-      const W = innerWidth, H = innerHeight, t0 = performance.now(), DUR = 900;
+      const W = document.documentElement.clientWidth, H = document.documentElement.clientHeight, DUR = 900; // excludes the scrollbar
       const MAX = (Math.max(W, H) * 2.2) / t; // big enough that the crossbar alone covers the screen
-      const step = (now) => {
-        const k = Math.min(1, (now - t0) / DUR), e = k * k * k * k; // ease-in: slow start, fast rush
-        const s = Math.exp(Math.log(MAX) * e);
-        const h = pts.map(([x, y], i) => `${i ? "L" : "M"}${(cx + (x - cx) * s).toFixed(1)} ${(cy + (y - cy) * s).toFixed(1)}`).join("");
-        el.style.clipPath = `path(evenodd, "M0 0H${W}V${H}H0Z${h}Z")`;
-        if (k < 1) requestAnimationFrame(step);
-        else el.remove();
-      };
-      requestAnimationFrame(step);
+      const shape = (s) => pts.map(([x, y], i) => `${i ? "L" : "M"}${(cx + (x - cx) * s).toFixed(1)} ${(cy + (y - cy) * s).toFixed(1)}`).join("");
+      // thin outline tracing the H (drawn above the loader, which gets clipped) so it reads as a shape throughout
+      const edge = document.createElement("div");
+      edge.className = "ld-hedge";
+      edge.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><path/></svg>`;
+      document.body.appendChild(edge);
+      const edgePath = edge.querySelector("path");
+      edgePath.setAttribute("d", `${shape(1)}Z`);
+      el.classList.add("hfade");
+      setTimeout(() => {
+        // intro starts now, so the page seen through the H is already in its hidden starting state
+        document.body.classList.add("ready");
+        const t0 = performance.now();
+        const step = (now) => {
+          const k = Math.min(1, (now - t0) / DUR), e = k * k * k * k; // ease-in: slow start, fast rush
+          const h = shape(Math.exp(Math.log(MAX) * e));
+          el.style.clipPath = `path(evenodd, "M0 0H${W}V${H}H0Z${h}Z")`;
+          edgePath.setAttribute("d", `${h}Z`);
+          if (k < 1) requestAnimationFrame(step);
+          else { el.remove(); edge.remove(); }
+        };
+        requestAnimationFrame(step);
+      }, 520);
     };
   };
 
