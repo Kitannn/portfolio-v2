@@ -747,7 +747,7 @@
     addEventListener("pointermove", (e) => {
       if (e.pointerType !== "mouse") return;
       hud.style.transform = `translate(${e.clientX + 16}px, ${e.clientY + 18}px)`;
-      xy.textContent = `X:${pad(e.clientX)} Y:${pad(e.clientY)}`;
+      xy.textContent = `X:${pad(e.clientX)}\nY:${pad(e.clientY)}`; // stacked, X over Y
       const onBar = e.target.closest?.(".float-win .win-bar") && !e.target.closest("[data-winclose]");
       hud.classList.toggle("grab", !!onBar || !!document.querySelector(".float-win.dragging"));
       hud.classList.add("on");

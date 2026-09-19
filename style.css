@@ -392,6 +392,7 @@ body.crt-on #crt { opacity: 1; animation: crtFlicker .15s steps(2) infinite; }
 #cursor-hud { position: fixed; left: 0; top: 0; z-index: 400; pointer-events: none; font: 500 10px/1 "IBM Plex Mono", monospace; letter-spacing: .06em; color: #fff; mix-blend-mode: difference; white-space: nowrap; opacity: 0; transition: opacity .2s; }
 #cursor-hud.on { opacity: 1; }
 #cursor-hud span { transition: opacity .15s; }
+#cursor-hud .c-xy { display: block; white-space: pre; line-height: 1.35; }
 #cursor-hud .c-state { position: absolute; left: 0; top: 0; opacity: 0; }
 #cursor-hud.grab .c-xy { opacity: 0; }
 #cursor-hud.grab .c-state { opacity: 1; }
