@@ -111,10 +111,11 @@
         <canvas data-gl="vcr"></canvas>
         <div class="vcr-fallback">${reel.map((w, i) => (w.hero || w.cover ? `<img data-i="${i}" src="${esc(asset(w.hero || w.cover))}" alt="">` : `<div data-i="${i}">${tile(w)}</div>`)).join("")}</div>
         <div class="vcr-lines" aria-hidden="true"></div>
+        <div class="vcr-nofeed" aria-hidden="true"><b>No feed</b><span>CH-01 · signal lost</span></div>
         <div class="vcr-hud vcr-tl"><div class="rec"><i></i>Work</div>
           <ol>${reel.map((w, i) => `<li><button type="button" data-reel="${i}">${i + 1}: ${esc(w.title)}<b> ←</b></button></li>`).join("")}</ol></div>
         <div class="vcr-hud vcr-tr">CH-<span class="vcr-ch">01</span> · SP</div>
-        <div class="vcr-hud vcr-bl"><div class="play">PLAY ▶</div><div class="tc">00.00.00.00</div></div>
+        <div class="vcr-hud vcr-bl"><div class="play"><span class="p-on">PLAY ▶</span><span class="p-off">STOP ■</span></div><div class="tc">00.00.00.00</div></div>
         <div class="vcr-wins"></div>
       </div>
     </section>`;
@@ -718,8 +719,7 @@
     const lis = [...sec.querySelectorAll("[data-reel]")];
     const box = sec.querySelector(".vcr-wins");
     const tc = sec.querySelector(".tc"), ch = sec.querySelector(".vcr-ch");
-    const t0 = performance.now();
-    let cur = -1;
+    let t0 = 0, cur = -1, want = 0, live = false;
 
     if (ctl) reel.forEach((w, i) => {
       const src = w.hero || w.cover;
@@ -757,11 +757,29 @@
     };
     const onScroll = () => {
       const r = sec.getBoundingClientRect();
-      show(Math.max(0, Math.min(reel.length - 1, Math.round(-r.top / innerHeight))));
+      want = Math.max(0, Math.min(reel.length - 1, Math.round(-r.top / innerHeight)));
+      if (live) show(want);
     };
     addEventListener("scroll", onScroll, { passive: true });
     onCleanup(() => removeEventListener("scroll", onScroll));
     onScroll();
+
+    // No feed until the screen is actually looked at: hold "NO FEED" for a beat, then glitch the picture in
+    const connect = () => {
+      if (live || !sec.isConnected) return;
+      live = true;
+      t0 = performance.now();
+      stick.classList.add("feed", "feeding");
+      show(want);
+      setTimeout(() => stick.classList.remove("feeding"), 1400);
+    };
+    const io = new IntersectionObserver((es) => {
+      if (!es.some((e) => e.isIntersecting)) return;
+      io.disconnect();
+      setTimeout(connect, reduceMotion ? 0 : 750);
+    }, { threshold: 0.45 });
+    io.observe(stick);
+    onCleanup(() => io.disconnect());
 
     sec.addEventListener("click", (e) => {
       const b = e.target.closest("[data-reel]");
@@ -774,7 +792,7 @@
     const tick = () => {
       if (!sec.isConnected) return;
       const r = stick.getBoundingClientRect();
-      if (r.bottom > 0 && r.top < innerHeight) {
+      if (live && r.bottom > 0 && r.top < innerHeight) {
         const f = Math.floor((performance.now() - t0) / (1000 / 30));
         tc.textContent = `${pad(Math.floor(f / 108000))}.${pad(Math.floor(f / 1800) % 60)}.${pad(Math.floor(f / 30) % 60)}.${pad(f % 30)}`;
       }

@@ -81,7 +81,7 @@ void main() {
     // VHS playback: two cover-fit textures cross-fading, line jitter, a rolling tear band, RGB split,
     // scanlines, noise and vignette. u_glitch spikes on every cut between works.
     vcr: HEAD + `
-uniform sampler2D u_a, u_b; uniform vec2 u_ia, u_ib; uniform float u_mix, u_glitch;
+uniform sampler2D u_a, u_b; uniform vec2 u_ia, u_ib; uniform float u_mix, u_glitch, u_sq, u_static;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 vec2 cover(vec2 f, vec2 img) { float sc = max(u_res.x / img.x, u_res.y / img.y); return (f - u_res * .5) / (img * sc) + .5; }
 vec3 samp(vec2 f) { return mix(texture(u_a, cover(f, u_ia)).rgb, texture(u_b, cover(f, u_ib)).rgb, u_mix); }
@@ -93,12 +93,13 @@ void main() {
   float blockGlitch = u_glitch * step(.55, hash(vec2(floor(f.y / (22. * px)), floor(t * 30.))));
   f.x += (hash(vec2(floor(f.y / (2. * px)), floor(t * 24.))) - .5) * px * (1.2 + 26. * band + 90. * blockGlitch);
   f.x += sin(uv.y * 38. + t * 2.) * .7 * px;
+  f.x += (sin(uv.y * 16. + t * 45.) * 70. + sin(uv.y * 61. - t * 83.) * 18.) * u_sq * px; // feed-in squiggle
   float ca = px * (2. + 5. * band + 14. * u_glitch);
   vec3 col = vec3(samp(f + vec2(ca, 0.)).r, samp(f).g, samp(f - vec2(ca, 0.)).b);
   float l = dot(col, vec3(.299, .587, .114));
   col = mix(vec3(l), col, 1.18) * .9 + .035;
   col *= .8 + .2 * sin(gl_FragCoord.y * 1.9);
-  col += (hash(f + fract(t * 7.)) - .5) * (.09 + .25 * u_glitch);
+  col += (hash(f + fract(t * 7.)) - .5) * (.09 + .25 * u_glitch + .3 * u_static); // u_static: snow while there's no feed
   col += vec3(.15, 1., .35) * smoothstep(.0035, 0., bd) * .75 + band * .05;
   vec2 q = uv - .5;
   col *= 1. - dot(q, q) * 1.15;
@@ -122,7 +123,7 @@ void main() {
 }`,
   };
 
-  const UNIFORMS = ["u_res", "u_time", "u_mouse", "u_hover", "u_col", "u_cells", "u_amp", "u_seed", "u_rot", "u_tex", "u_img", "u_a", "u_b", "u_ia", "u_ib", "u_mix", "u_glitch"];
+  const UNIFORMS = ["u_res", "u_time", "u_mouse", "u_hover", "u_col", "u_cells", "u_amp", "u_seed", "u_rot", "u_tex", "u_img", "u_a", "u_b", "u_ia", "u_ib", "u_mix", "u_glitch", "u_sq", "u_static"];
 
   // ---------- core ----------
   const instances = new Set();
@@ -238,8 +239,10 @@ void main() {
   };
   const vcrUniforms = (inst) => {
     const { gl, u } = inst;
-    inst.mix = Math.min(1, inst.mix + (reduceMotion ? 1 : 0.07));
+    inst.mix = Math.min(1, inst.mix + (reduceMotion ? 1 : inst.rate));
     inst.glitch *= reduceMotion ? 0 : 0.92;
+    inst.sq *= reduceMotion ? 0 : 0.93;
+    inst.static = inst.cur < 0 ? 1 : Math.max(0, inst.static - (reduceMotion ? 1 : 0.04));
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, inst.tex[inst.prev] || inst.blank);
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, inst.tex[inst.cur] || inst.blank);
     gl.uniform1i(u.u_a, 0); gl.uniform1i(u.u_b, 1);
@@ -247,10 +250,13 @@ void main() {
     gl.uniform2fv(u.u_ib, inst.size[inst.cur] || [1, 1]);
     gl.uniform1f(u.u_mix, inst.mix);
     gl.uniform1f(u.u_glitch, inst.glitch);
-    if (inst.mix < 1 || inst.glitch > 0.01) inst.dirty = true;
+    gl.uniform1f(u.u_sq, inst.sq);
+    gl.uniform1f(u.u_static, inst.static);
+    if (inst.mix < 1 || inst.glitch > 0.01 || inst.sq > 0.01 || (inst.static > 0 && inst.static < 1)) inst.dirty = true;
   };
   const vcrController = (inst) => {
-    Object.assign(inst, { tex: [], size: [], cur: -1, prev: -1, mix: 1, glitch: 0, blank: texture(inst.gl) });
+    // starts with no feed (blank + snow); the first show() glitches the picture in from nothing
+    Object.assign(inst, { tex: [], size: [], cur: -1, prev: -1, mix: 1, rate: 0.07, glitch: 0, sq: 0, static: 1, blank: texture(inst.gl) });
     return {
       set(i, src) {
         inst.gl.activeTexture(inst.gl.TEXTURE2);
@@ -261,10 +267,12 @@ void main() {
       show(i) {
         if (i === inst.cur) return;
         const first = inst.cur < 0;
-        inst.prev = first ? i : inst.cur;
+        inst.prev = first ? -1 : inst.cur;   // -1 = the blank no-feed texture
         inst.cur = i;
-        inst.mix = first ? 1 : 0;
-        inst.glitch = first ? 0 : 1;
+        inst.mix = 0;
+        inst.rate = first ? 0.035 : 0.07;     // feed-in fades up slower than a channel change
+        inst.glitch = first ? 1.3 : 1;
+        inst.sq = first ? 1 : 0;
         inst.dirty = true;
       },
     };
