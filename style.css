@@ -388,6 +388,11 @@ body.crt-on #crt { opacity: 1; animation: crtFlicker .15s steps(2) infinite; }
 .crt-toggle { font: inherit; font-size: 9px; letter-spacing: .08em; padding: 0 5px; line-height: 10px; border: 1px solid var(--fg); border-radius: 3px; opacity: .45; }
 .crt-toggle[aria-pressed="true"] { opacity: 1; background: var(--fg); color: var(--bg); }
 
+/* ---------- section titles drawn by WebGL (gl.js titleFx); DOM text stays for a11y, the caret stays DOM ---------- */
+#title-fx { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 45; pointer-events: none; }
+.sec-title.gl-title { color: transparent; }
+.sec-title.gl-title::after { color: var(--fg); }
+
 /* ---------- cursor readout ---------- */
 #cursor-hud { position: fixed; left: 0; top: 0; z-index: 400; pointer-events: none; font: 500 10px/1 "IBM Plex Mono", monospace; letter-spacing: .06em; color: #fff; mix-blend-mode: difference; white-space: nowrap; opacity: 0; transition: opacity .2s; }
 #cursor-hud.on { opacity: 1; }

@@ -219,6 +219,7 @@ void main() {
       if (!inst.canvas.isConnected && !inst.opts.manual) return destroy(inst);
       if (inst.type === "distort" ? inst.canvas.isConnected && (inst.active || inst.hover > 0.01) : inst.visible && (!reduceMotion || inst.dirty)) draw(inst, t);
     });
+    titleFx?.draw(now);
     requestAnimationFrame(loop);
   };
   requestAnimationFrame(loop);
@@ -317,6 +318,180 @@ void main() {
     });
   }
 
+  // ---------- section titles: liquid smear + ripple + RGB split trailing the cursor ----------
+  // One fixed full-screen canvas draws every .sec-title on the page as a texture quad over its DOM text.
+  // A short trail of recent cursor points (position + velocity) drives the displacement, which fades out.
+  const titleFx = (() => {
+    const N = 16, LIFE = 0.85; // trail points, seconds each point lives
+    const FS = `#version 300 es
+precision highp float;
+uniform sampler2D u_tex; uniform vec4 u_rect; uniform vec4 u_col; uniform float u_alpha, u_dpr;
+uniform vec4 u_trail[${N}]; uniform float u_age[${N}];
+out vec4 o;
+float cov(vec2 f) {
+  vec2 uv = (f - u_rect.xy) / u_rect.zw;
+  if (uv.x < 0. || uv.y < 0. || uv.x > 1. || uv.y > 1.) return 0.;
+  return texture(u_tex, uv).a;
+}
+void main() {
+  vec2 f = gl_FragCoord.xy, disp = vec2(0.);
+  float R = 120. * u_dpr;
+  for (int i = 0; i < ${N}; i++) {
+    float life = 1. - u_age[i];
+    if (life <= 0.) continue;
+    vec2 d = f - u_trail[i].xy, v = u_trail[i].zw;
+    float sp = length(v), cap = 14. * u_dpr;
+    if (sp > cap) v *= cap / sp;                                                   // fast flicks don't explode
+    float r = length(d), fall = exp(-(r * r) / (R * R)) * life * life;
+    float speed = clamp(sp / (6. * u_dpr), 0., 1.);
+    disp += v * fall * .45;                                                        // smear along the motion
+    disp.x += sin(r / (8. * u_dpr) - u_age[i] * 16.) * fall * speed * 4. * u_dpr;  // concentric ripples
+  }
+  disp.x *= 1.6; // stretch mostly sideways, like the reference
+  float dl = length(disp), lim = 34. * u_dpr;
+  disp *= lim * (1. - exp(-dl / lim)) / max(dl, 1e-4); // soft clamp: strong but letters stay readable
+  float m = clamp(length(disp) / (18. * u_dpr), 0., 1.);
+  vec2 ca = vec2(m * 8. * u_dpr, m * 1.5 * u_dpr);
+  float cr = cov(f - disp * 1.18 + ca), cg = cov(f - disp), cb = cov(f - disp * .82 - ca);
+  float base = min(cr, min(cg, cb)), a = max(cr, max(cg, cb));
+  vec3 col = u_col.rgb * base + (vec3(cr, cg, cb) - base); // exact text colour where channels agree, pure RGB fringes where they split
+  o = vec4(col, a) * u_alpha;
+}`;
+    const VSQ = `#version 300 es
+in vec2 p; uniform vec4 u_rect; uniform vec2 u_res;
+void main() { vec2 px = u_rect.xy + p * u_rect.zw; gl_Position = vec4(px / u_res * 2. - 1., 0., 1.); }`;
+
+    let canvas = null, gl = null, u = null, items = [], fg = [1, 1, 1, 1], ok = null;
+    const trail = [];
+    let last = null;
+
+    const init = () => {
+      if (ok !== null) return ok;
+      canvas = document.createElement("canvas");
+      canvas.id = "title-fx";
+      canvas.setAttribute("aria-hidden", "true");
+      document.body.appendChild(canvas);
+      gl = canvas.getContext("webgl2", { alpha: true, premultipliedAlpha: true, antialias: true });
+      if (!gl) { canvas.remove(); return (ok = false); }
+      const sh = (k, src) => { const s = gl.createShader(k); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { console.warn("[gl:title]", gl.getShaderInfoLog(s)); return null; } return s; };
+      const vs = sh(gl.VERTEX_SHADER, VSQ), fs = sh(gl.FRAGMENT_SHADER, FS);
+      if (!vs || !fs) { canvas.remove(); return (ok = false); }
+      const prog = gl.createProgram();
+      gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { canvas.remove(); return (ok = false); }
+      gl.useProgram(prog);
+      gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1]), gl.STATIC_DRAW);
+      const loc = gl.getAttribLocation(prog, "p");
+      gl.enableVertexAttribArray(loc);
+      gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+      u = Object.fromEntries(["u_tex", "u_rect", "u_col", "u_alpha", "u_dpr", "u_trail", "u_age", "u_res"].map((n) => [n, gl.getUniformLocation(prog, n)]));
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      readFg();
+      if (!reduceMotion) addEventListener("pointermove", (e) => {
+        const now = performance.now();
+        if (last) trail.push({ x: e.clientX, y: e.clientY, vx: e.clientX - last.x, vy: e.clientY - last.y, t: now });
+        last = { x: e.clientX, y: e.clientY };
+        if (trail.length > N) trail.shift();
+      }, { passive: true });
+      addEventListener("kv2-theme", () => { readFg(); items.forEach((i) => { i.key = ""; }); });
+      document.fonts?.ready.then(() => items.forEach((i) => { i.key = ""; }));
+      return (ok = true);
+    };
+    const readFg = () => {
+      const probe = document.createElement("span");
+      probe.style.color = "var(--fg)";
+      document.body.appendChild(probe);
+      const m = getComputedStyle(probe).color.match(/[\d.]+/g) || [255, 255, 255];
+      probe.remove();
+      fg = [m[0] / 255, m[1] / 255, m[2] / 255, 1];
+    };
+
+    // Rasterise the title's own text (not the ::after caret) in its real font, aligned to the DOM glyph box.
+    const build = (it) => {
+      const el = it.el, cs = getComputedStyle(el);
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const rects = range.getClientRects();
+      const er = el.getBoundingClientRect();
+      const key = [el.textContent, cs.fontSize, cs.fontWeight, fg.join(), Math.round(er.width), rects.length].join("|");
+      if (key === it.key) return;
+      it.key = key;
+      it.skip = rects.length !== 1; // wrapped titles keep plain DOM text
+      el.classList.toggle("gl-title", !it.skip);
+      if (it.skip) return;
+      const tr = range.getBoundingClientRect();
+      const text = cs.textTransform === "uppercase" ? el.textContent.toUpperCase() : el.textContent;
+      const pad = Math.ceil(tr.height * 0.7);
+      Object.assign(it, { tx: tr.left - er.left, ty: tr.top - er.top, tw: tr.width, th: tr.height, pad });
+      const c = document.createElement("canvas");
+      c.width = Math.ceil((tr.width + pad * 2) * DPR); c.height = Math.ceil((tr.height + pad * 2) * DPR);
+      const g = c.getContext("2d");
+      g.scale(DPR, DPR);
+      g.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+      if ("letterSpacing" in g) g.letterSpacing = cs.letterSpacing;
+      g.fillStyle = "#fff";
+      g.textBaseline = "alphabetic";
+      const asc = g.measureText(text).fontBoundingBoxAscent || parseFloat(cs.fontSize) * 0.8;
+      g.fillText(text, pad, pad + asc);
+      if (!it.tex) it.tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, it.tex);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    };
+
+    const trailData = new Float32Array(N * 4), ageData = new Float32Array(N);
+    const draw = (now) => {
+      if (!items.length) return;
+      const W = Math.round(innerWidth * DPR), H = Math.round(innerHeight * DPR);
+      if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; gl.viewport(0, 0, W, H); items.forEach((i) => { i.key = ""; }); }
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      for (let i = 0; i < N; i++) {
+        const p = trail[trail.length - 1 - i];
+        const age = p ? (now - p.t) / 1000 / LIFE : 1;
+        ageData[i] = Math.min(1, age);
+        trailData.set(p ? [p.x * DPR, H - p.y * DPR, p.vx * DPR, -p.vy * DPR] : [0, 0, 0, 0], i * 4);
+      }
+      gl.uniform2f(u.u_res, W, H);
+      gl.uniform4fv(u.u_trail, trailData);
+      gl.uniform1fv(u.u_age, ageData);
+      gl.uniform4fv(u.u_col, fg);
+      gl.uniform1f(u.u_dpr, DPR);
+      gl.uniform1i(u.u_tex, 0);
+      gl.activeTexture(gl.TEXTURE0);
+      for (const it of items) {
+        if (!it.el.isConnected) continue;
+        const er = it.el.getBoundingClientRect();
+        if (er.bottom < -200 || er.top > innerHeight + 200) continue;
+        build(it);
+        if (it.skip) continue;
+        const x = er.left + it.tx - it.pad, y = er.top + it.ty - it.pad, w = it.tw + it.pad * 2, h = it.th + it.pad * 2;
+        gl.bindTexture(gl.TEXTURE_2D, it.tex);
+        gl.uniform4f(u.u_rect, x * DPR, H - (y + h) * DPR, w * DPR, h * DPR);
+        gl.uniform1f(u.u_alpha, it.fade ? +getComputedStyle(it.fade).opacity : 1);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+      }
+    };
+
+    return {
+      mount(root) {
+        if (!init()) return;
+        items = [...root.querySelectorAll(".sec-title")].map((el) => ({ el, fade: el.closest(".fade"), key: "" }));
+      },
+      unmount() {
+        items.forEach((it) => { it.el.classList.remove("gl-title"); if (it.tex) gl.deleteTexture(it.tex); });
+        items = [];
+        if (gl) { gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); }
+      },
+      draw,
+    };
+  })();
+
   // ---------- public API ----------
   window.KGL = {
     debug: () => [...instances].map((i) => ({ type: i.type, hover: +i.hover.toFixed(2), visible: i.visible, size: [i.canvas.width, i.canvas.height] })),
@@ -330,11 +505,13 @@ void main() {
         c.parentElement.classList.add("gl-on");
         if (type === "vcr") c._vcr = vcrController(inst);
       });
+      titleFx.mount(root);
     },
     // Release contexts before a page re-render (browsers cap live WebGL contexts at ~16).
     unmount() {
       instances.forEach((i) => { if (!i.opts.manual) destroy(i); });
       if (fx) { fx.active = null; fx.hover = 0; fx.canvas.remove(); }
+      titleFx.unmount();
     },
   };
 })();
