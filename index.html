@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=8">
+  <link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
   <!-- Loading screen: console boot text over CRT noise; app.js types it out as hero images load, then powers off into the intro. -->
@@ -24,6 +24,7 @@
   <!-- Page chrome: frame, status bar, header -->
   <div class="frame" aria-hidden="true"></div>
   <div class="status">
+    <button class="crt-toggle" type="button" aria-pressed="true" title="Toggle CRT effect">CRT</button>
     <button class="theme-dots" type="button" aria-label="Toggle light / dark theme"><i></i><i></i></button>
     <span class="clock" title="Vancouver time">--:--</span>
   </div>
@@ -39,6 +40,8 @@
   </header>
 
   <main id="app"></main>
+  <!-- CRT overlay (every page): static grain, scanlines, vignette, rolling band. Toggle with the CRT button. -->
+  <div id="crt" aria-hidden="true"><canvas></canvas><div class="crt-lines"></div></div>
 
   <!-- Project window (modal) -->
   <div class="modal" id="modal" hidden>
@@ -50,6 +53,6 @@
   <!-- data.js, images/, assets/ and cv.html are synced from ../Portfolio by sync.ps1 — edit content there. -->
   <script src="data.js?v=2"></script>
   <script src="gl.js?v=2"></script>
-  <script src="app.js?v=10"></script>
+  <script src="app.js?v=13"></script>
 </body>
 </html>

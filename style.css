@@ -375,6 +375,19 @@ canvas[data-gl] { display: block; }
   .ld-foot { left: 20px; right: 20px; bottom: 22px; }
 }
 
+/* ---------- CRT overlay (every page) ---------- */
+#crt { position: fixed; inset: 0; z-index: 85; pointer-events: none; opacity: 0; transition: opacity .5s; }
+body.crt-on #crt { opacity: 1; animation: crtFlicker .15s steps(2) infinite; }
+@keyframes crtFlicker { 50% { opacity: .96; } }
+#crt canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; opacity: .06; mix-blend-mode: screen; }
+.crt-lines { position: absolute; inset: 0;
+  background: repeating-linear-gradient(0deg, rgba(0, 0, 0, .16) 0 1px, transparent 1px 3px), radial-gradient(ellipse at center, transparent 58%, rgba(0, 0, 0, .42) 100%); }
+.crt-lines::after { content: ""; position: absolute; left: 0; right: 0; height: 22vh; top: -25vh; background: linear-gradient(transparent, rgba(255, 255, 255, .035), transparent); animation: roll 6s linear infinite; }
+:root[data-theme="light"] #crt canvas { mix-blend-mode: multiply; opacity: .08; }
+:root[data-theme="light"] .crt-lines { background: repeating-linear-gradient(0deg, rgba(0, 0, 0, .07) 0 1px, transparent 1px 3px), radial-gradient(ellipse at center, transparent 60%, rgba(0, 0, 0, .18) 100%); }
+.crt-toggle { font: inherit; font-size: 9px; letter-spacing: .08em; padding: 0 5px; line-height: 10px; border: 1px solid var(--fg); border-radius: 3px; opacity: .45; }
+.crt-toggle[aria-pressed="true"] { opacity: 1; background: var(--fg); color: var(--bg); }
+
 /* ---------- cursor readout ---------- */
 #cursor-hud { position: fixed; left: 0; top: 0; z-index: 400; pointer-events: none; font: 500 10px/1 "IBM Plex Mono", monospace; letter-spacing: .06em; color: #fff; mix-blend-mode: difference; white-space: nowrap; opacity: 0; transition: opacity .2s; }
 #cursor-hud.on { opacity: 1; }

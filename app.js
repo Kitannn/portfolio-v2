@@ -707,10 +707,13 @@
 
     // the bar follows whichever is slower: real asset loading or the console typing out
     const typingEnd = Math.max(...rows.map((r) => r.at)) + 240;
+    let lastFrame = t0;
     const frame = (now) => {
+      const dt = Math.min(0.5, (now - lastFrame) / 1000); // seconds; time-based so throttled frames don't slow the bar
+      lastFrame = now;
       const typedPct = reduceMotion ? 100 : Math.min(100, ((now - t0) / typingEnd) * 100);
       const target = Math.min(progress(), typedPct);
-      shown = Math.min(target, shown + Math.max(0.4, (target - shown) * 0.15));
+      shown = Math.min(target, shown + Math.max(25 * dt, (target - shown) * (1 - Math.exp(-9 * dt))));
       pct.textContent = String(Math.floor(shown)).padStart(3, "0") + "%";
       fill.style.width = shown + "%";
       drawNoise(now);
@@ -752,7 +755,40 @@
     document.documentElement.addEventListener("pointerleave", () => hud.classList.remove("on"));
   };
 
+  // ---------- CRT overlay on every page (toggleable, remembered per browser) ----------
+  let crtOn = true;
+  try { crtOn = localStorage.getItem("kv2-crt") !== "off"; } catch {}
+  const crtBtn = document.querySelector(".crt-toggle");
+  const applyCrt = () => {
+    document.body.classList.toggle("crt-on", crtOn);
+    crtBtn.setAttribute("aria-pressed", String(crtOn));
+  };
+  crtBtn.addEventListener("click", () => {
+    crtOn = !crtOn;
+    try { localStorage.setItem("kv2-crt", crtOn ? "on" : "off"); } catch {}
+    applyCrt();
+  });
+  const initCrt = () => {
+    const c = document.querySelector("#crt canvas"), g = c.getContext("2d");
+    const size = () => { c.width = Math.ceil(innerWidth / 3); c.height = Math.ceil(innerHeight / 3); };
+    size();
+    addEventListener("resize", size);
+    let last = 0;
+    const draw = (now) => {
+      if (document.body.classList.contains("crt-on") && !document.hidden && now - last > 50) {
+        last = now;
+        const img = g.createImageData(c.width, c.height), d = img.data;
+        for (let i = 0; i < d.length; i += 4) { const v = (Math.random() * 255) | 0; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; }
+        g.putImageData(img, 0, 0);
+      }
+      if (!reduceMotion) requestAnimationFrame(draw);
+    };
+    requestAnimationFrame(draw);
+  };
+
   route();
+  applyCrt();
+  initCrt();
   initCursorHud();
   runLoader();
 })();
