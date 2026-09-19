@@ -250,17 +250,25 @@
   let stopHelix = null;
   const two = (n) => String(n).padStart(2, "0");
 
-  // Card stream (after kidzfrmnowhere): one main image per project, tilted slabs flowing from far top-right to
-  // near bottom-left. It drifts on its own, scrolling pushes it along, hovering spotlights one card.
-  const GHOSTS = 5; // stacked copies behind each card = the slab thickness
-  const streamMarkup = (list) => `
+  // Card stream (after kidzfrmnowhere): one main image per project on tilted slabs drifting mostly down-left.
+  // Depth arcs (small far at the top, big and near mid-screen, small again at the bottom), each card has its own
+  // random lane and size, the cursor tilts the whole view, and ghost copies trail off whichever edge is behind
+  // the card's motion. Few projects (filters) are repeated so the stream always stays dense.
+  const GHOSTS = 5;
+  const streamSlots = (list) => {
+    const reps = Math.max(1, Math.round(12 / Math.max(1, list.length)));
+    const slots = [];
+    for (let r = 0; r < reps; r++) list.forEach((_, p) => slots.push(p));
+    return slots;
+  };
+  const streamMarkup = (list, slots) => `
     <section class="stream" aria-label="Work stream">
       <div class="stream-stick">
-        <div class="stream-world">${list.map((w, p) => {
-          const src = w.hero || w.cover;
+        <div class="stream-world">${slots.map((p, i) => {
+          const w = list[p], src = w.hero || w.cover;
           const face = src ? `<img src="${esc(asset(src))}" alt="" decoding="async" draggable="false">` : tile(w);
           const bg = src ? `background-image:url('${esc(asset(src))}')` : `background:${esc(w.accent || "var(--sky)")}`;
-          return `<a class="s-card" data-p="${p}" href="#/works/${slug(w.title)}" aria-label="${esc(w.title)}">
+          return `<a class="s-card" data-p="${p}" href="#/works/${slug(w.title)}" aria-label="${esc(w.title)}"${i >= list.length ? ' tabindex="-1"' : ""}>
             ${Array.from({ length: GHOSTS }, (_, k) => `<i class="s-ghost" style="${bg};--k:${k + 1}"></i>`).join("")}
             <span class="s-face">${face}</span></a>`;
         }).join("")}</div>
@@ -278,13 +286,27 @@
     const cards = [...sec.querySelectorAll(".s-card")];
     const links = [...sec.querySelectorAll("[data-sp]")];
     const label = sec.querySelector(".s-label");
-    const N = cards.length;
-    // per-card variety: base size and zigzag side
-    const vary = cards.map((_, i) => ({ s: 0.82 + ((i * 37) % 11) / 26, side: i % 2 ? 1 : -1 }));
+    const S_ = cards.length;
+    // stable per-slot randomness: lane offset, size, tilt jitter, sway phase
+    const rnd = (i, k) => { const x = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return x - Math.floor(x); };
+    const gameOrder = S.work.filter((w) => w.kind === "game" && w.cover);
+    const photoOrder = S.work.filter((w) => w.kind === "photo");
+    const priority = (w) => {
+      const g = gameOrder.indexOf(w);
+      if (g >= 0) return [1.3, 1.24, 1.18][g] ?? 1.12;           // Ghost Fox, Sims, FIFA
+      const ph = photoOrder.indexOf(w);
+      if (ph >= 0 && ph < 5) return 1.06 - ph * 0.07;            // Tokyo → Live, decreasing
+      return 0.74;                                               // Everyday, Personal Projects
+    };
+    const vary = cards.map((c, i) => ({
+      lane: (rnd(i, 1) - 0.5) * 2, size: priority(list[+c.dataset.p]), sway: rnd(i, 5) * Math.PI * 2,
+      off: 0, prev: null, gx: 0, gy: 0,
+    }));
     let phase = 0, scrollPhase = 0, scrollTarget = 0, speed = 1, alive = true, last = performance.now(), hot = -1;
+    const view = { x: 0, y: 0, tx: 0, ty: 0 }; // cursor-driven viewing angle
 
     // Wheel view is a full-screen stage: wheel, trackpad, touch-drag and arrow keys drive the stream, not the page.
-    const push = (px) => { scrollTarget += px / (stick.clientHeight * 1.6); }; // ~1.6 screens of input per full cycle
+    const push = (px) => { scrollTarget += px / (stick.clientHeight * 1.6); };
     const onWheel = (e) => { e.preventDefault(); push(e.deltaMode === 1 ? e.deltaY * 32 : e.deltaY); };
     let touchY = null;
     const onTouchStart = (e) => { touchY = e.touches[0].clientY; };
@@ -304,14 +326,14 @@
     const focus = (p) => {
       hot = p;
       sec.classList.toggle("hovering", p >= 0);
-      cards.forEach((c, i) => c.classList.toggle("hot", i === p));
+      cards.forEach((c) => c.classList.toggle("hot", +c.dataset.p === p)); // every copy of the project
       links.forEach((a) => a.classList.toggle("on", +a.dataset.sp === p));
       label.textContent = p >= 0 ? `${list[p].title} — ${list[p].tag}` : "";
       label.classList.toggle("on", p >= 0);
     };
-    cards.forEach((c, i) => {
-      c.addEventListener("pointerenter", () => focus(i));
-      c.addEventListener("pointerleave", () => { if (hot === i) focus(-1); });
+    cards.forEach((c) => {
+      c.addEventListener("pointerenter", () => focus(+c.dataset.p));
+      c.addEventListener("pointerleave", () => { if (hot === +c.dataset.p) focus(-1); });
     });
     links.forEach((a) => {
       a.addEventListener("pointerenter", () => focus(+a.dataset.sp));
@@ -321,39 +343,88 @@
       const r = stick.getBoundingClientRect();
       const lx = e.clientX - r.left, flip = lx + 18 + label.offsetWidth > r.width - 12; // keep the label on screen
       label.style.transform = `translate(${flip ? lx - 18 - label.offsetWidth : lx + 18}px, ${e.clientY - r.top - 6}px)`;
+      if (e.pointerType === "mouse") { view.tx = lx / r.width - 0.5; view.ty = (e.clientY - r.top) / r.height - 0.5; }
     });
+    stick.addEventListener("pointerleave", () => { view.tx = 0; view.ty = 0; });
 
     const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
     const frame = (now) => {
       if (!alive || !sec.isConnected) return;
-      const dt = Math.min(0.05, (now - last) / 1000);
+      const dt = Math.max(1 / 240, Math.min(0.05, (now - last) / 1000));
       last = now;
       const r = stick.getBoundingClientRect();
       if (r.bottom > 0 && r.top < innerHeight) {
+        const t = now / 1000;
         // drift on its own; ease to a stop while a card is hovered so it can be clicked
         speed += ((hot >= 0 ? 0 : 1) - speed) * (1 - Math.exp(-6 * dt));
-        if (!reduceMotion) phase += dt * 0.028 * speed;
+        if (!reduceMotion) phase += dt * 0.04 * speed;
         scrollPhase += (scrollTarget - scrollPhase) * (1 - Math.exp(-8 * dt));
+        // viewing angle follows the cursor (applied to every card identically)
+        view.x += (view.tx - view.x) * (1 - Math.exp(-4 * dt));
+        view.y += (view.ty - view.y) * (1 - Math.exp(-4 * dt));
+        const rx = 20 - view.y * 14, ry = -14 + view.x * 22;
+
         const W = stick.clientWidth, H = stick.clientHeight, mobile = W < 640;
-        const cw = mobile ? 230 : Math.max(300, Math.min(560, W * 0.36));
-        // path from far top-right to near bottom-left
-        const x0 = W * (mobile ? 0.62 : 0.72), y0 = -H * 0.12, z0 = -1700;
-        const x1 = W * (mobile ? 0.38 : 0.34), y1 = H * 1.12, z1 = 420;
-        for (let i = 0; i < N; i++) {
-          let u = (i / N + phase + scrollPhase) % 1;
+        // card width follows the window: the smaller of a share of the width or of the height
+        const cw = mobile ? Math.min(W * 0.62, H * 0.3) : Math.min(W * 0.36, H * 0.62);
+
+        // 1) where each card wants to be: mostly down-left, depth arcs far → near (mid-screen) → far
+        const P = vary.map((v, i) => {
+          let u = (i / S_ + phase + scrollPhase) % 1;
           if (u < 0) u += 1;
-          const e = u * u * (3 - 2 * u) * 0.35 + u * 0.65; // a little ease so cards linger mid-stream
-          const v = vary[i];
-          const x = x0 + (x1 - x0) * e + v.side * W * (mobile ? 0.12 : 0.11);
-          const y = y0 + (y1 - y0) * e;
-          const z = z0 + (z1 - z0) * e;
-          const o = smooth(0, 0.2, u) * (1 - smooth(0.82, 1, u));
-          const c = cards[i];
-          c.style.width = cw * v.s + "px";
-          c.style.height = cw * v.s * 0.6 + "px";
-          c.style.transform = `translate3d(${(x - (cw * v.s) / 2).toFixed(1)}px, ${(y - cw * v.s * 0.3).toFixed(1)}px, ${z.toFixed(1)}px) rotateX(24deg) rotateY(-16deg) rotateZ(3deg)`;
+          const arc = Math.pow(Math.sin(Math.PI * u), 0.8);
+          const w = cw * v.size, h = w * 0.6;          // layout size (scale applied by transform)
+          const fit = (W - (mobile ? 12 : 28)) / (w * 1.3); // never wider than the stage, tilt included
+          const s = Math.min(fit, (0.4 + 0.72 * arc) * v.size); // on-screen scale: small → big mid-screen → small
+          const x = W * (mobile ? 0.62 : 0.66) - W * (mobile ? 0.24 : 0.34) * u
+            + v.lane * W * (mobile ? 0.12 : 0.14) + Math.sin(t * 0.3 + v.sway) * W * 0.01
+            + view.x * (s - 0.6) * W * 0.05;           // nearer cards parallax more with the view
+          const y = -H * 0.28 + H * 1.56 * u + view.y * (s - 0.6) * H * 0.04;
+          return { u, s, w, h, x, y };
+        });
+
+        // 2) cards never slice through each other: each is its own layer, stacked by depth. On top of that,
+        //    heavily overlapping neighbours push each other sideways (the farther/smaller one moves more).
+        const push = new Float32Array(S_);
+        for (let i = 0; i < S_; i++) for (let j = i + 1; j < S_; j++) {
+          const a = P[i], b = P[j];
+          const aw = (a.w * a.s) / 2, ah = (a.h * a.s) / 2, bw = (b.w * b.s) / 2, bh = (b.h * b.s) / 2;
+          const ax = a.x + vary[i].off, bx = b.x + vary[j].off;
+          const ox = aw + bw - Math.abs(ax - bx), oy = ah + bh - Math.abs(a.y - b.y);
+          if (ox <= 0 || oy <= Math.min(ah, bh) * 0.5) continue; // only real overlaps, not grazes
+          const dir = ax === bx ? (vary[i].lane < vary[j].lane ? -1 : 1) : Math.sign(ax - bx);
+          const f = Math.min(ox, W * 0.2) * Math.min(1, oy / (2 * Math.min(ah, bh)));
+          const wa = b.s / (a.s + b.s), wb = a.s / (a.s + b.s);
+          push[i] += dir * f * wa;
+          push[j] -= dir * f * wb;
+        }
+
+        for (let i = 0; i < S_; i++) {
+          const v = vary[i], p = P[i], c = cards[i];
+          v.off += push[i] * (1 - Math.exp(-3 * dt)) - v.off * (1 - Math.exp(-0.35 * dt)); // nudge out, drift home
+          // keep the whole card on screen horizontally; if neighbours push it into the edge it overlaps instead
+          const half = (p.w * p.s * 1.25) / 2, margin = mobile ? 6 : 14; // 1.25 covers the tilt's widest projection, incl. cursor view angle
+          const lo = half + margin, hi = W - half - margin;
+          const x = lo > hi ? W / 2 : Math.max(lo, Math.min(hi, p.x + v.off));
+          v.off = x - p.x; // don't let the push wind up past the edge
+          const o = smooth(0, 0.14, p.u) * (1 - smooth(0.86, 1, p.u));
+          c.style.width = p.w + "px";
+          c.style.height = p.h + "px";
+          c.style.zIndex = String(+c.dataset.p === hot ? 3000 : Math.round(p.u * 1000)); // older cards on top; hovered card to the front
+          c.style.transform = `translate(${(x - p.w / 2).toFixed(1)}px, ${(p.y - p.h / 2).toFixed(1)}px) scale(${p.s.toFixed(4)}) perspective(900px) rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg)`;
           c.style.setProperty("--o", o.toFixed(3));
-          c.style.zIndex = String(Math.round(z + 3000));
+          // trail: ghosts step back along the card's on-screen motion
+          if (v.prev && Math.abs(p.u - v.prev.u) < 0.5) {
+            const vx = (x - v.prev.x) / dt, vy = (p.y - v.prev.y) / dt, vs = (p.s - v.prev.s) / dt;
+            const tx = (-vx * 0.12) / p.s, ty = (-vy * 0.12 - vs * 60) / p.s;
+            const len = Math.hypot(tx, ty), cap = 26;
+            const k = len > cap ? cap / len : 1;
+            v.gx += (tx * k - v.gx) * (1 - Math.exp(-10 * dt));
+            v.gy += (ty * k - v.gy) * (1 - Math.exp(-10 * dt));
+          }
+          v.prev = { x, y: p.y, s: p.s, u: p.u };
+          c.style.setProperty("--gx", v.gx.toFixed(2) + "px");
+          c.style.setProperty("--gy", v.gy.toFixed(2) + "px");
         }
       }
       requestAnimationFrame(frame);
@@ -373,7 +444,8 @@
     document.body.classList.toggle("work-wheel", wheel);
     if (wheel) scrollTo({ top: 0, behavior: "instant" });
     if (wheel) {
-      host.innerHTML = streamMarkup(list);
+      const slots = streamSlots(list);
+      host.innerHTML = streamMarkup(list, slots);
       stopHelix = initStream(host, list);
     } else {
       // Games and photo sets get their own titled groups; empty groups are skipped.
