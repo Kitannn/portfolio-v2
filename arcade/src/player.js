@@ -230,10 +230,23 @@ export function createPlayer(scene, getStats) {
 // view right, without limit, and the crosshair never leaves the middle of the screen. It also
 // removes the feedback problem for free — the aim is taken from the camera rather than from a
 // raycast that the camera itself moves.
+//
+// It orbits: the car is the pivot and the camera swings around it on yaw AND pitch, staying the
+// same distance out. Pitch is what moves the crosshair up and down the world — tilting down pulls
+// the aim point in close, tilting toward the horizon pushes it out — so the reticle is always
+// exactly under the crosshair at the middle of the screen.
+const PITCH_MIN = 0.07;        // any flatter and the camera clips through the ground
+const PITCH_MAX = 1.08;        // any steeper and it is a top-down view
+const PITCH_REST = 0.34;       // what chase mode sits at, and where mouse-look starts
+const PIVOT_Y = 1.45;          // the point on the car the camera orbits
+const AIM_H = 13.5;            // effective height the aim ray falls from; sets how pitch maps to reach
+const AIM_MIN = 7, AIM_MAX = 85;
 
 export function createChaseCam(camera) {
   let shake = 0;
   let camYaw = 0;
+  let camPitch = PITCH_REST;
+  const aim = new THREE.Vector3(0, 1.1, 0);
   const goal = new THREE.Vector3();
   const look = new THREE.Vector3();
   const cur = new THREE.Vector3(0, 9, -16);
@@ -243,6 +256,7 @@ export function createChaseCam(camera) {
   return {
     snap(player) {
       camYaw = player.yaw;
+      camPitch = PITCH_REST;
       const back = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw)).multiplyScalar(-10.0);
       cur.set(player.pos.x + back.x, 5.0, player.pos.z + back.z);
       curLook.set(player.pos.x, 1.4, player.pos.z);
@@ -251,32 +265,62 @@ export function createChaseCam(camera) {
     },
     shake(amount) { shake = Math.min(2.2, shake + amount); },
     get yaw() { return camYaw; },
-    update(dt, player, freeLook = false, lookDelta = 0) {
+    get pitch() { return camPitch; },
+    get aim() { return aim; },
+    update(dt, player, freeLook = false, lookDelta = 0, lookDeltaY = 0) {
       const sp = Math.abs(player.speed);
       // sit further back and lower as speed builds; lead the car slightly into its drift
       const dist = 9.4 + clamp(sp * 0.085, 0, 3.0);
       const height = 4.5 + clamp(sp * 0.030, 0, 1.4);
 
       if (freeLook) {
-        camYaw += lookDelta;          // 1:1 with the mouse, like any other mouse-look
+        // 1:1 with the mouse on both axes. Down on the mouse is down in the world, which swings
+        // the camera up and over so it looks down — the usual orbit-cam inversion, and the one
+        // that matches every third-person shooter.
+        camYaw += lookDelta;
+        camPitch = clamp(camPitch + lookDeltaY, PITCH_MIN, PITCH_MAX);
       } else {
         const want = player.yaw - clamp(player.slip * 0.012, -0.30, 0.30);
         camYaw += angleDelta(camYaw, want) * damp(5.0, dt);
+        camPitch += (PITCH_REST - camPitch) * damp(5.0, dt);
       }
 
-      goal.set(
-        player.pos.x - Math.sin(camYaw) * dist,
-        height,
-        player.pos.z - Math.cos(camYaw) * dist
-      );
-      look.set(
-        player.pos.x + Math.sin(camYaw) * (3.0 + sp * 0.10),
-        1.5,
-        player.pos.z + Math.cos(camYaw) * (3.0 + sp * 0.10)
-      );
-      // position lags more than the look target, which reads as weight
-      cur.lerp(goal, damp(player.boosting ? 6.5 : 5.2, dt));
-      curLook.lerp(look, damp(9, dt));
+      // where the crosshair lands: straight down the camera's heading, at a distance set by pitch
+      const reach = clamp(AIM_H / Math.tan(Math.max(PITCH_MIN, camPitch)), AIM_MIN, AIM_MAX);
+      aim.set(player.pos.x + Math.sin(camYaw) * reach, 1.1, player.pos.z + Math.cos(camYaw) * reach);
+
+      if (freeLook) {
+        // swing around the car on both axes, holding the same distance out
+        const flat = dist * Math.cos(camPitch);
+        goal.set(
+          player.pos.x - Math.sin(camYaw) * flat,
+          PIVOT_Y + dist * Math.sin(camPitch),
+          player.pos.z - Math.cos(camYaw) * flat
+        );
+        look.copy(aim);                 // so the reticle sits dead centre, under the crosshair
+      } else {
+        goal.set(
+          player.pos.x - Math.sin(camYaw) * dist,
+          height,
+          player.pos.z - Math.cos(camYaw) * dist
+        );
+        look.set(
+          player.pos.x + Math.sin(camYaw) * (3.0 + sp * 0.10),
+          1.5,
+          player.pos.z + Math.cos(camYaw) * (3.0 + sp * 0.10)
+        );
+      }
+      if (freeLook) {
+        // Rigid while aiming. Any smoothing here lets the camera lag the car through a corner,
+        // which slides the reticle off the fixed crosshair — and the whole point of this mode is
+        // that what is under the crosshair is what the gun hits.
+        cur.copy(goal);
+        curLook.copy(look);
+      } else {
+        // position lags more than the look target, which reads as weight
+        cur.lerp(goal, damp(player.boosting ? 6.5 : 5.2, dt));
+        curLook.lerp(look, damp(9, dt));
+      }
       camera.position.copy(cur);
       if (shake > 0) {
         shake = Math.max(0, shake - dt * 1.9);

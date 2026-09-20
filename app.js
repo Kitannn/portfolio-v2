@@ -1478,7 +1478,13 @@
 
     // CRT static: low-res random grain, upscaled
     const noise = el.querySelector(".ld-noise"), g = noise.getContext("2d");
-    const sizeNoise = () => { noise.width = Math.ceil(innerWidth / 3); noise.height = Math.ceil(innerHeight / 3); };
+    // innerWidth is 0 in a tab that has not been laid out yet (opened in the background, or a
+    // zero-size frame). createImageData(0, 0) throws IndexSizeError, which kills the rAF loop and
+    // leaves the loader on screen forever — so never let either dimension reach zero.
+    const sizeNoise = () => {
+      noise.width = Math.max(1, Math.ceil(innerWidth / 3));
+      noise.height = Math.max(1, Math.ceil(innerHeight / 3));
+    };
     sizeNoise();
     let lastNoise = 0;
     const drawNoise = (now) => {

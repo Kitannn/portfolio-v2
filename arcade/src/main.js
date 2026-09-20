@@ -217,14 +217,11 @@ reticleDot.rotation.x = -Math.PI / 2;
 reticleDot.renderOrder = 5;
 scene.add(reticleDot);
 
-const AIM_REACH = 26;      // how far down the barrel the mouse-look reticle sits
-
 function updateAim() {
   if (input.freeLook) {
     // The gun goes where the camera goes, so the crosshair stays dead centre and what you see is
-    // what you shoot. No raycast: the camera IS the aim.
-    const y = chase.yaw;
-    aimPoint.set(player.pos.x + Math.sin(y) * AIM_REACH, 1.1, player.pos.z + Math.cos(y) * AIM_REACH);
+    // what you shoot. No raycast: the camera IS the aim, on both axes.
+    aimPoint.copy(chase.aim);
     player.aimGun(aimPoint);
     reticle.position.set(aimPoint.x, 0.06, aimPoint.z);
     reticleDot.position.set(aimPoint.x, 0.06, aimPoint.z);
@@ -257,6 +254,7 @@ let dyingIn = 0;        // wreck animation before the finish screen
 
 attachInput(canvas, {
   onPause: () => togglePause(),
+  onLockLost: () => { if (state === STATE.PLAYING) togglePause(); },
   onReload: () => { if (state === STATE.PLAYING) weapon.startReload(); },
 });
 
@@ -370,11 +368,13 @@ function togglePause() {
   if (state === STATE.PLAYING) {
     state = STATE.PAUSED;
     input.firing = false;
-    if (input.freeLook) input.setFreeLook?.(false);   // release the pointer so the buttons are clickable
+    // hand the cursor back so the menu is clickable, but stay IN mouse-look
+    input.releaseMouse?.(true);
     pause.show(run);
   } else if (state === STATE.PAUSED) {
     pause.close();
     state = STATE.PLAYING;
+    if (input.freeLook) input.captureMouse?.();       // resuming takes the cursor again
   }
 }
 
@@ -535,8 +535,8 @@ function frame(now) {
     if (!boss.active && !boss.dying && run.elapsed >= BOSS_AT) boss.spawn(player);
     weapon.update(dt, { firing: input.firing, aimPoint, boosting: player.boosting, targets });
     fx.update(dt, player, run.stats.pickupRadius, gainXp);
-    chase.update(dt, player, input.freeLook, input.lookDelta);
-    input.lookDelta = 0;
+    chase.update(dt, player, input.freeLook, input.lookDelta, input.lookDeltaY);
+    input.lookDelta = input.lookDeltaY = 0;
     reticle.visible = reticleDot.visible = true;
     if (player.dead) wreckPlayer();
 

@@ -11,7 +11,9 @@ export const input = {
   aim: { x: 0, y: 0 },      // pointer in normalised device coords
   aimActive: false,         // false until the pointer has moved / touched once
   freeLook: false,          // mouse-look: the camera turns with the mouse and the gun follows it
-  lookDelta: 0,             // radians of yaw requested since the last frame, consumed by the camera
+  lookDelta: 0,             // yaw requested since the last frame, in radians, consumed by the camera
+  lookDeltaY: 0,            // …and pitch
+  pointerLocked: false,
   paused: false,
 };
 
@@ -25,37 +27,46 @@ const KEYMAP = {
 
 const LOOK_SENS = 0.0022;   // radians of yaw per pixel of mouse travel
 
-export function attachInput(canvas, { onPause, onReload, onFreeLook } = {}) {
-  // Mouse-look needs the pointer captured, exactly as an FPS does: the cursor has to stop being a
-  // thing on the screen and start being raw motion, or it hits the window edge and the view stops.
-  // Pointer lock is the nice version: the cursor disappears and the mouse has no edges. It is not
-  // always available though — an embedded or cross-origin document refuses it — and the request
-  // rejects as a promise, so it has to be caught or it surfaces as an uncaught SecurityError.
-  // Mouse-look still works without it, just bounded by the window, so a refusal is not fatal.
-  const lock = () => {
+export function attachInput(canvas, { onPause, onReload, onFreeLook, onLockLost } = {}) {
+  // Mouse-look needs the pointer captured, exactly as an FPS does: the cursor stops being a thing
+  // on the screen, parks in the middle, and becomes raw motion — otherwise it walks to the window
+  // edge and the view stops turning. Pointer lock can be refused (an embedded or cross-origin
+  // document says no) and the request rejects as a promise, so it is caught; mouse-look still
+  // works without it, just bounded by the window, and a refusal must not be fatal.
+  //
+  // Capture and MODE are deliberately separate. Pausing hands the cursor back so the menu is
+  // clickable, but you are still in mouse-look — resuming simply takes the cursor again.
+  let releasingOnPurpose = false;
+
+  const capture = () => {
     if (document.pointerLockElement === canvas) return;
     try { canvas.requestPointerLock?.()?.catch?.(() => {}); } catch { /* look on without it */ }
   };
-  const unlock = () => {
+  const release = (onPurpose = true) => {
+    releasingOnPurpose = onPurpose;
     if (document.pointerLockElement === canvas) { try { document.exitPointerLock?.(); } catch { /* ignore */ } }
+    else releasingOnPurpose = false;
   };
+  input.captureMouse = capture;
+  input.releaseMouse = release;
 
   const setFreeLook = (on) => {
     input.freeLook = on;
-    input.lookDelta = 0;
-    if (on) lock(); else unlock();
+    input.lookDelta = input.lookDeltaY = 0;
+    if (on) capture(); else release(true);
     onFreeLook?.(on);
   };
   input.setFreeLook = setFreeLook;
 
-  // Esc, or anything else that drops the lock, leaves mouse-look — otherwise the camera would keep
-  // turning from a pointer the player can no longer see.
   document.addEventListener("pointerlockchange", () => {
-    if (document.pointerLockElement !== canvas && input.freeLook) {
-      input.freeLook = false;
-      input.lookDelta = 0;
-      onFreeLook?.(false);
-    }
+    const locked = document.pointerLockElement === canvas;
+    input.pointerLocked = locked;
+    if (locked) return;
+    input.lookDelta = input.lookDeltaY = 0;
+    // Losing the cursor without asking — Esc, alt-tab — means the player has stopped playing, so
+    // pause rather than silently dropping out of mouse-look.
+    if (!releasingOnPurpose && input.freeLook) onLockLost?.();
+    releasingOnPurpose = false;
   });
   const held = { fwd: 0, back: 0, left: 0, right: 0 };
 
@@ -67,10 +78,10 @@ export function attachInput(canvas, { onPause, onReload, onFreeLook } = {}) {
   };
 
   addEventListener("keydown", (e) => {
-    // while the pointer is captured, Esc belongs to the browser: it releases the lock, which the
-    // pointerlockchange handler above turns into "leave mouse-look". Pausing as well would be two
-    // things happening on one key.
-    if (e.code === "Escape") { if (!document.pointerLockElement) onPause?.(); return; }
+    // Esc always pauses. When the pointer is captured the browser also releases it on Esc, which
+    // is fine — pausing releases it anyway, and the release is marked deliberate so the handler
+    // above does not try to pause a second time.
+    if (e.code === "Escape") { onPause?.(); return; }
     if (e.code === "KeyR") { onReload?.(); return; }
     if (e.code === "ControlLeft" || e.code === "ControlRight") {
       e.preventDefault();
@@ -106,6 +117,7 @@ export function attachInput(canvas, { onPause, onReload, onFreeLook } = {}) {
     // Mouse-look reads movement, not position — that holds whether or not the lock was granted.
     if (input.freeLook) {
       input.lookDelta += (e.movementX || 0) * LOOK_SENS;
+      input.lookDeltaY += (e.movementY || 0) * LOOK_SENS;
       input.aimActive = true;
       return;
     }
@@ -118,7 +130,7 @@ export function attachInput(canvas, { onPause, onReload, onFreeLook } = {}) {
   canvas.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
     // clicking back into the canvas re-captures the pointer if mouse-look is still on
-    if (input.freeLook) lock();
+    if (input.freeLook) capture();
     setAim(e);
     input.firing = true;
   });
