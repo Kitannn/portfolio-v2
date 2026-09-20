@@ -11,7 +11,7 @@
 #   python tools/thumbs.py --force    rebuild everything
 import os
 import sys
-from PIL import Image
+from PIL import Image, ImageOps
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "images")
@@ -35,6 +35,8 @@ def build(full, rel, tier, size, quality):
         return 0, os.path.getsize(dest)
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     with Image.open(full) as im:
+        # honour the camera's EXIF orientation: browsers rotate the original, so the tier must match it
+        im = ImageOps.exif_transpose(im)
         im = im.convert("RGBA" if im.mode in ("RGBA", "LA", "P") and "A" in im.getbands() else "RGB")
         im.thumbnail((size, size), Image.LANCZOS)
         im.save(dest, "WEBP", quality=quality, method=6)
