@@ -46,26 +46,66 @@
   // Interactive barcode (FEAT.inputString): clicking a barcode swaps it for a controller input string that means
   // something (the hero's is the Konami code). Click the inputs to light them; light them all for a burst.
   // After 7 s without a click it turns back into the barcode.
+  // Controller codes hidden behind the barcodes. Each one is a cheat for the arcade game at
+  // /arcade/ — completing a string here unlocks that effect over there for the session.
+  //   [ display name, input sequence, what it does in the game ]
+  // Sequences are kept to ten inputs or fewer, and .mk-in wraps, so none of them can run off a
+  // narrow card.
   const CODES = {
-    konami: ["Konami code", "U U D D L R L R B A"],
-    hadouken: ["Hadouken", "D DR R P"],
-    shoryuken: ["Shoryuken", "R D DR P"],
-    tatsumaki: ["Tatsumaki", "D DL L K"],
-    sims: ["The Sims cheat console", "#Ctrl #Shift #C"],
-    motherlode: ["Motherlode", "#M #O #T #H #E #R #L #O #D #E"],
-    iddqd: ["IDDQD · god mode", "#I #D #D #Q #D"],
-    sonic: ["Sonic 2 level select", "U D D D D U"],
-    gta: ["GTA IV phone cheat", "#4 #8 #2 - #5 #5 #5 - #0 #1 #0 #0"],
-    rainbow: ["FIFA rainbow flick", "#RS D U U"],
+    konami:     ["Konami code",           "U U D D L R L R B A", "+50 max HP"],
+    hadouken:   ["Hadouken",              "D DR R P",            "+20% weapon damage"],
+    shoryuken:  ["Shoryuken",             "R D DR P",            "+25% fire rate"],
+    tatsumaki:  ["Tatsumaki",             "D DL L K",            "Rounds pierce one extra enemy"],
+    sims:       ["Sims cheat console",    "#Ctrl #Shift #C",     "Start every run with a 100 shield"],
+    motherlode: ["Motherlode",            "#M #O #T #H #E #R",   "+35% credits earned"],
+    iddqd:      ["IDDQD",                 "#I #D #D #Q #D",      "Take 40% less damage"],
+    sonic:      ["Sonic level select",    "U D D D D U",         "+25% top speed"],
+    gta:        ["Cheat hotline",         "#4 #8 #2 #5 #5 #5",   "Start with a free sub-weapon"],
+    rainbow:    ["Rainbow flick",         "#RS D U U",           "+35% grip, +20% turn rate"],
+    overdrive:  ["Overdrive",             "L R L R #LB",         "Boost never drops below a third"],
+    scanline:   ["Scanline",              "#Sel U #Sel D",       "+40% XP gained"],
+    nitro:      ["Nitro prime",           "#LT #RT U U",         "+40% boost power and recovery"],
+    wombo:      ["Wombo combo",           "#Z #R B A",           "+15 rounds per magazine"],
   };
-  const SEC_CODES = { about: "hadouken", profile: "hadouken", experience: "shoryuken", work: "sims", photography: "tatsumaki", faq: "iddqd", contact: "gta" };
+
+  // Every barcode gets its OWN code — the old version hashed the title into a pool of five, so
+  // most of the page showed the same three sequences. Assignment happens on first sight of a
+  // given label and is remembered, so a re-render keeps the same code in the same place.
+  const CODE_KEYS = Object.keys(CODES);
+  const PINNED = { hero: "konami", name: "sonic" };
+  const SEC_CODES = { about: "hadouken", profile: "wombo", experience: "shoryuken", work: "sims", photography: "tatsumaki", faq: "iddqd", contact: "gta" };
   const WORK_CODES = { "FIFA Mobile": "rainbow", "The Sims: Town Stories": "motherlode" };
-  const CODE_POOL = ["hadouken", "shoryuken", "tatsumaki", "sonic", "konami"];
+  const codeSeen = new Map();
+  const codeTaken = new Set([...Object.values(PINNED), ...Object.values(SEC_CODES), ...Object.values(WORK_CODES)]);
+  const codeFor = (text, explicit) => {
+    if (explicit) return explicit;
+    if (WORK_CODES[text]) return WORK_CODES[text];
+    if (codeSeen.has(text)) return codeSeen.get(text);
+    const free = CODE_KEYS.find((k) => !codeTaken.has(k)) || CODE_KEYS[codeSeen.size % CODE_KEYS.length];
+    codeTaken.add(free);
+    codeSeen.set(text, free);
+    return free;
+  };
+
+  // ---------- cheats shared with the arcade ----------
+  const CHEAT_KEY = "hkitandrun.cheats";
+  const readCheats = () => {
+    try { return JSON.parse(localStorage.getItem(CHEAT_KEY)) || { ids: [] }; } catch { return { ids: [] }; }
+  };
+  const unlockCheat = (id) => {
+    const data = readCheats();
+    data.ids = data.ids || [];
+    const fresh = !data.ids.includes(id);
+    if (fresh) data.ids.push(id);
+    data.all = CODE_KEYS.every((k) => data.ids.includes(k));
+    try { localStorage.setItem(CHEAT_KEY, JSON.stringify(data)); } catch { /* storage off: this run only */ }
+    return { fresh, all: data.all, found: data.ids.length, total: CODE_KEYS.length };
+  };
   // decorative mark: the barcode (or the film edge), clickable into a controller code when FEAT.inputString is on
   const mark = (text, h, code) => {
     const base = FEAT.filmStrip ? filmEdge(text, h) : barcode(text, h);
     if (!FEAT.inputString) return base;
-    const key = code || WORK_CODES[text] || CODE_POOL[[...String(text)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 3) % CODE_POOL.length];
+    const key = codeFor(String(text), code);
     return `<span class="mk" data-code="${key}" style="--kh:${h || 22}px" role="button" tabindex="0" aria-label="Barcode: click to reveal a controller code">${base}</span>`;
   };
 
@@ -301,7 +341,14 @@
         ${FEAT.devices ? devices() : clouds()}
         <div class="hero-caption"><p><b>${esc(S.name)}</b><br>game designer<br>portfolio</p>${mark(S.name, undefined, "konami")}</div>
         <button class="pill ghost restore" type="button" hidden>Restore windows ↺</button>
-        <div class="hero-hint">drag the windows · ${FEAT.devices ? "bump the gadgets" : "poke the clouds"}</div>
+        <div class="hero-hint">drag the windows · ${FEAT.devices ? "bump the gadgets" : "poke the clouds"} · click the barcodes</div>
+        <a class="pak" href="${esc(asset("arcade/"))}" data-arcade aria-label="Arcade">
+          <span class="pak-well" aria-hidden="true">
+            <span class="pak-cart"><i class="pak-lip"></i><i class="pak-label"></i><i class="pak-grip"></i></span>
+            <span class="pak-slot"></span>
+          </span>
+          <span class="pak-name">Arcade</span>
+        </a>
       </section>
 
       <section class="section">
@@ -1085,13 +1132,14 @@
   // Letters are blocky, built from 5 rects each (in a 5x6 box, stroke 1) so any letter can morph into any other.
   // Unused slots are zero-size rects tucked inside a stroke. Rects overlap rather than abut, so the union has no seams.
   // Home starts as H — the letter loaded through in the intro — and becomes S (for START) after the first jump
-  const PAGE_LETTERS = { home: "H", works: "W", profile: "P", contact: "C" };
+  const PAGE_LETTERS = { home: "H", works: "W", profile: "P", contact: "C", arcade: "A" };
   const GLYPHS_PT = {
     H: { rects: [[0, 0, 1, 6], [4, 0, 1, 6], [0.5, 2.5, 4, 1], [2.5, 3, 0, 0], [4.5, 5.5, 0, 0]], focus: [2.5, 3] },   // crossbar, like the intro
     W: { rects: [[0, 0, 1, 6], [4, 0, 1, 6], [0, 5, 5, 1], [2, 2.5, 1, 3.5], [4.5, 5.5, 0, 0]], focus: [2.5, 4] },     // middle upright
     P: { rects: [[0, 0, 1, 6], [4, 0, 1, 3.5], [0, 2.5, 5, 1], [0, 0, 5, 1], [4.5, 3, 0, 0]], focus: [2.5, 3] },       // bowl's lower bar
     C: { rects: [[0, 0, 1, 6], [4, 0, 1, 1.8], [0, 5, 5, 1], [0, 0, 5, 1], [4, 4.2, 1, 1.8]], focus: [0.5, 3] },       // spine
     S: { rects: [[0, 0, 1, 3.5], [4, 2.5, 1, 3.5], [0, 2.5, 5, 1], [0, 0, 5, 1], [0, 5, 5, 1]], focus: [2.5, 3] },   // middle bar
+    A: { rects: [[0, 0, 1, 6], [4, 0, 1, 6], [0, 2.5, 5, 1], [0, 0, 5, 1], [2.5, 5.5, 0, 0]], focus: [2.5, 3] },   // crossbar
   };
   const SVGNS = "http://www.w3.org/2000/svg";
   let pt = null;
@@ -1265,11 +1313,16 @@
       mk.appendChild(s);
       setTimeout(() => s.remove(), 1000);
     }
+    const id = mk.dataset.code;
+    const [, , cheat] = CODES[id] || [];
+    const res = unlockCheat(id);
     const pop = document.createElement("b");
     pop.className = "mk-pop";
-    pop.textContent = "Code accepted!";
+    pop.innerHTML = res.all
+      ? `ALL CODES FOUND · full clearance at <a href="${asset("arcade/")}">/arcade</a>`
+      : `Unlocked in <a href="${asset("arcade/")}">/arcade</a> · ${esc(cheat || "a cheat")} <i>${res.found}/${res.total}</i>`;
     mk.appendChild(pop);
-    setTimeout(() => pop.remove(), 1500);
+    setTimeout(() => pop.remove(), 4200);
     setTimeout(() => mk.classList.remove("combo"), 700);
   };
   document.addEventListener("click", (e) => {
@@ -1289,6 +1342,30 @@
   });
   document.addEventListener("keydown", (e) => {
     if ((e.key === "Enter" || e.key === " ") && e.target.classList?.contains("mk")) { e.preventDefault(); e.target.click(); }
+  });
+
+  // The arcade is a separate page, not a hash route, so it cannot go through the router — but it
+  // should still leave the way every other page does. Play the zoom-out and morph to "A", then
+  // hand over to the browser at the point the router would have swapped the content.
+  document.addEventListener("click", (e) => {
+    const link = e.target.closest("[data-arcade]");
+    if (!link || e.metaKey || e.ctrlKey || e.shiftKey || e.button > 0) return;
+    if (reduceMotion || transitioning || document.getElementById("loader")) return;
+    e.preventDefault();
+    transitioning = true;
+    // Let the whole thing play — out, morph to A, back in — and only then hand over. The swap
+    // step drops an opaque cover behind the letter so the zoom-in reveals black rather than the
+    // page you are leaving, and the arcade's own boot screen picks up from there.
+    pageTransition(
+      PAGE_LETTERS[current] || "H",
+      "A",
+      () => {
+        const cover = document.createElement("div");
+        cover.className = "leave-cover";
+        document.body.appendChild(cover);
+      },
+      () => { location.href = link.href; }
+    );
   });
 
   // ---------- global handlers ----------
@@ -1314,7 +1391,10 @@
   // socials + mark
   document.getElementById("mark-text").textContent = S.name;
   // game-menu nav (FEAT.gameMenu): START / WORK / PLAYER / CONTACT (routes stay the same)
-  if (FEAT.gameMenu) document.querySelectorAll(".pill-nav a").forEach((a) => { a.textContent = { home: "Start", works: "Work", profile: "Profile", contact: "Contact" }[a.dataset.page]; });
+  if (FEAT.gameMenu) document.querySelectorAll(".pill-nav a").forEach((a) => {
+    const label = { home: "Start", works: "Work", profile: "Profile", contact: "Contact", arcade: "Arcade" }[a.dataset.page];
+    if (label) a.textContent = label;
+  });
   document.getElementById("socials").innerHTML = ["Instagram", "GitHub"].filter((k) => net[k]).map((k) => `<a class="pill" href="${esc(net[k])}" target="_blank" rel="noopener">${k} ↗</a>`).join("");
 
   // The Instagram / GitHub pills sit off the right edge until the cursor comes up to that corner (FEAT.tuckNav)

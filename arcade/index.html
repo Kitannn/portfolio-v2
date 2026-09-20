@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="robots" content="noindex, nofollow">
+<title>H[K]IT AND RUN — Henry Tan</title>
+<meta name="description" content="A hidden arcade shooter.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🚗</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Silkscreen:wght@400;700&display=swap">
+<link rel="stylesheet" href="arcade.css?v=21">
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js" } }
+</script>
+</head>
+<body>
+  <!-- the 3D scene lives here; every overlay below sits on top of it -->
+  <canvas id="stage"></canvas>
+
+  <!-- boot / loading -->
+  <div class="screen" id="boot">
+    <div class="boot-inner">
+      <p class="boot-bar"><i></i></p>
+      <p class="boot-note">loading</p>
+    </div>
+  </div>
+
+  <!-- title -> Start -> menu stack -->
+  <div class="screen" id="title" hidden>
+    <div class="title-wrap">
+      <h1 class="game-logo"><span>H<i>[</i>K<i>]</i>IT AND</span><em>RUN</em></h1>
+      <button class="big-btn" id="startBtn" type="button">Start</button>
+      <nav class="menu" id="menu" hidden>
+        <button class="menu-btn" data-menu="play" type="button">Play</button>
+        <button class="menu-btn" data-menu="vehicle" type="button">Change Vehicle</button>
+        <button class="menu-btn" data-menu="board" type="button">Leaderboard</button>
+        <button class="menu-btn" data-menu="collection" type="button">Collection</button>
+        <button class="menu-btn" data-menu="shop" type="button">Shop</button>
+        <button class="menu-btn menu-danger" data-menu="reset" type="button">Reset Progress</button>
+      </nav>
+      <p class="cheat-line" id="cheatLine" hidden></p>
+      <p class="credits-line" id="creditsLine" hidden><button class="who" id="whoBtn" type="button" hidden title="Change your player name"></button>◆ <b>0</b> credits</p>
+    </div>
+    <a class="back-site" href="../">← kitannn.com</a>
+  </div>
+
+  <div class="hud" id="hud" hidden></div>
+  <div class="screen modal-host" id="modalHost" hidden></div>
+  <div class="screen" id="pauseHost" hidden></div>
+
+  <noscript><p class="screen">This page needs JavaScript.</p></noscript>
+  <script type="module" src="src/main.js?v=3"></script>
+</body>
+</html>
