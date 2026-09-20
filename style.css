@@ -190,7 +190,7 @@ canvas[data-gl] { display: block; }
 .rows .when { font-size: 11px; font-weight: 600; letter-spacing: .08em; }
 .rows .what { color: var(--muted); }
 .grid-cell { position: relative; border-left: 1px solid var(--line); min-height: 320px; color: var(--line-strong); overflow: hidden; }
-.grid-cell svg { position: absolute; inset: 0; }
+.grid-cell > svg { position: absolute; inset: 0; }   /* the warp overlay only — stickers draw their own inline SVG */
 .sticker {
   position: absolute; width: 132px; aspect-ratio: 1; border-radius: 50%; overflow: hidden;
   border: 5px solid #fff; box-shadow: 0 10px 24px rgba(0, 0, 0, .35); transition: transform .3s;
@@ -199,6 +199,12 @@ canvas[data-gl] { display: block; }
 .sticker:hover { transform: rotate(0deg) scale(1.08) !important; }
 .sticker.logo { border-radius: 16px; background: #1b1922; padding: 12px; }
 .sticker.logo img { object-fit: contain; }
+/* drawn tile for the Maxis game (no logo file): plumbob over the name */
+.sticker.plumb { display: grid; align-content: center; justify-items: center; gap: 7px; background: #10180f; }
+.sticker.plumb svg { position: static; width: 30px; height: 42px; filter: drop-shadow(0 0 7px rgba(110, 226, 122, .5)); }
+.sticker.plumb svg path { fill: #56d06d; }
+.sticker.plumb .pb-hi { fill: #c2f7cb; }
+.sticker.plumb b { font-size: 9px; font-weight: 600; line-height: 1.3; letter-spacing: .12em; text-transform: uppercase; color: #dff6e3; text-align: center; }
 
 /* ---------- works ---------- */
 .filters { display: grid; grid-template-columns: 120px 1fr; gap: 12px 24px; padding: 28px calc(var(--gutter) + 8px); border-bottom: 1px dashed var(--line-strong); font-size: 11px; }
@@ -315,7 +321,7 @@ canvas[data-gl] { display: block; }
 @media (max-width: 900px) {
   .works-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px 18px; }
   .split, .profile, .contact-grid { grid-template-columns: 1fr; }
-  .grid-cell { border-left: 0; border-top: 1px solid var(--line); min-height: 260px; }
+  .grid-cell { border-left: 0; border-top: 1px solid var(--line); min-height: 330px; }   /* room for the fourth sticker */
   .profile-side { position: relative; top: 0; max-width: 420px; }
   .resp { grid-template-columns: 1fr; }
 }

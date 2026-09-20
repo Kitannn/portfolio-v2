@@ -145,6 +145,13 @@
   };
 
   const tile = (w) => `<div class="gen-tile" style="--acc:${esc(w.accent || "var(--sky)")}"><small>${esc(w.tag)}</small><b>${esc(w.title)}</b>${mark(w.title, 18)}</div>`;
+  // Experience sticker for the Maxis project. The other two games ship a logo PNG; this one only has key art,
+  // so the tile is drawn instead: a plumbob over the game's name.
+  const simsTile = (w) => `
+    <a class="sticker logo plumb" href="#/works/${slug(w.title)}" style="left:11%;top:61%;width:106px;transform:rotate(5deg)" aria-label="${esc(w.title)}" title="${esc(w.title)} — EA Maxis">
+      <svg viewBox="0 0 24 34" aria-hidden="true"><path d="M12 0 24 12.4 12 34 0 12.4Z"/><path class="pb-hi" d="M12 2.4 21.3 12.1 12 16.6Z"/></svg>
+      <b>Town<br>Stories</b>
+    </a>`;
   const workCard = (w) => `
     <a class="work fade" href="#/works/${slug(w.title)}">
       <div class="thumb">${w.cover ? `<img src="${esc(asset(tiny(w.cover, "m")))}"${fall(w.cover)} alt="" loading="lazy">` : tile(w)}</div>
@@ -310,6 +317,7 @@
             <a class="sticker" href="#/profile" style="left:16%;top:18%;transform:rotate(-8deg)"><img src="${esc(asset(tiny(S.avatar)))}"${fall(S.avatar)} alt="birbKit"></a>
             ${games[0]?.logo ? `<a class="sticker logo" href="#/works/${slug(games[0].title)}" style="left:52%;top:10%;width:110px;transform:rotate(6deg)"><img src="${esc(asset(tiny(games[0].logo)))}"${fall(games[0].logo)} alt="${esc(games[0].title)}"></a>` : ""}
             ${games[2]?.logo ? `<a class="sticker logo" href="#/works/${slug(games[2].title)}" style="left:44%;top:52%;width:120px;transform:rotate(-4deg)"><img src="${esc(asset(tiny(games[2].logo)))}"${fall(games[2].logo)} alt="${esc(games[2].title)}"></a>` : ""}
+            ${games[1] ? simsTile(games[1]) : ""}
           </div>
         </div>
       </section>
