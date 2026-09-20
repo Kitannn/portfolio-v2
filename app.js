@@ -6,6 +6,7 @@
   const modal = document.getElementById("modal");
   const modalWin = modal.querySelector(".modal-win");
   const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const FEAT = window.FEATURES || {}; // redesign switches, see features.js
 
   const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const asset = (p) => (!p || /^(https?:)?\/\//.test(p) ? p : BASE + p);
@@ -26,6 +27,40 @@
       x += w + gap;
     }
     return `<svg class="barcode" viewBox="0 0 ${x} ${h}" width="${x}" height="${h}" fill="currentColor" aria-hidden="true">${bars}</svg>`;
+  };
+  // Film-strip edge (FEAT.filmStrip): sprocket holes along both edges with frame numbers and an edge code between,
+  // deterministic like the barcode. Uses the barcode's class so it sits and sizes the same wherever the barcode did.
+  const filmEdge = (text, h = 22) => {
+    const seed = [...String(text)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
+    const n = 1 + (seed % 34), W = 150, hole = Math.max(3, Math.round(h * 0.2)), fs = Math.max(5, h * 0.3);
+    let holes = "";
+    for (let x = 2; x < W - 5; x += 9) holes += `<rect x="${x}" y=".5" width="5" height="${hole}" rx="1"/><rect x="${x}" y="${h - hole - 0.5}" width="5" height="${hole}" rx="1"/>`;
+    return `<svg class="barcode film" viewBox="0 0 ${W} ${h}" width="${W}" height="${h}" fill="currentColor" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width=".9">${holes}</g><text x="1" y="${(h / 2 + fs * 0.36).toFixed(1)}" font-size="${fs.toFixed(1)}" font-family="IBM Plex Mono, monospace" letter-spacing=".3">◂${n}A  ${n + 1}  KT-400  ▸${n + 1}A</text></svg>`;
+  };
+  // Interactive barcode (FEAT.inputString): clicking a barcode swaps it for a controller input string that means
+  // something (the hero's is the Konami code). Click the inputs to light them; light them all for a burst.
+  // After 7 s without a click it turns back into the barcode.
+  const CODES = {
+    konami: ["Konami code", "U U D D L R L R B A"],
+    hadouken: ["Hadouken", "D DR R P"],
+    shoryuken: ["Shoryuken", "R D DR P"],
+    tatsumaki: ["Tatsumaki", "D DL L K"],
+    sims: ["The Sims cheat console", "#Ctrl #Shift #C"],
+    motherlode: ["Motherlode", "#M #O #T #H #E #R #L #O #D #E"],
+    iddqd: ["IDDQD · god mode", "#I #D #D #Q #D"],
+    sonic: ["Sonic 2 level select", "U D D D D U"],
+    gta: ["GTA IV phone cheat", "#4 #8 #2 - #5 #5 #5 - #0 #1 #0 #0"],
+    rainbow: ["FIFA rainbow flick", "#RS D U U"],
+  };
+  const SEC_CODES = { about: "hadouken", profile: "hadouken", experience: "shoryuken", work: "sims", photography: "tatsumaki", faq: "iddqd", contact: "gta" };
+  const WORK_CODES = { "FIFA Mobile": "rainbow", "The Sims: Town Stories": "motherlode" };
+  const CODE_POOL = ["hadouken", "shoryuken", "tatsumaki", "sonic", "konami"];
+  // decorative mark: the barcode (or the film edge), clickable into a controller code when FEAT.inputString is on
+  const mark = (text, h, code) => {
+    const base = FEAT.filmStrip ? filmEdge(text, h) : barcode(text, h);
+    if (!FEAT.inputString) return base;
+    const key = code || WORK_CODES[text] || CODE_POOL[[...String(text)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 3) % CODE_POOL.length];
+    return `<span class="mk" data-code="${key}" style="--kh:${h || 22}px" role="button" tabindex="0" aria-label="Barcode: click to reveal a controller code">${base}</span>`;
   };
 
   // ---------- warped grid (SVG, animated on rAF while visible) ----------
@@ -66,13 +101,44 @@
   if (!reduceMotion) requestAnimationFrame(tick);
 
   // ---------- shared bits ----------
-  const secHead = (title, lede, link, kicker) => `
+  // Save-slot headers (FEAT.slots): SLOT 01 · <play time> above the title and LOAD … ▸ links. Slots count up per
+  // page; each play time is real: time in games, at the current studio, making games, behind the lens, reading
+  // time of the FAQ, or the live Vancouver time on Contact.
+  let slotN = 0;
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const MON = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
+  const nowM = () => { const d = new Date(); return d.getFullYear() * 12 + d.getMonth(); };
+  const monthOf = (s) => { const m = /([A-Z][a-z]{2})[a-z]* (\d{4})/.exec(s); return m ? +m[2] * 12 + MON[m[1]] : nowM(); };
+  const span = (m) => (m >= 12 ? `${pad2(Math.floor(m / 12))}Y${pad2(m % 12)}M` : `${pad2(m)}M`);
+  const firstYear = (list) => Math.min(...list.map((w) => parseInt(String(w.year), 10)).filter(Boolean));
+  const vanFmt = new Intl.DateTimeFormat("en-GB", { timeZone: "America/Vancouver", hour: "2-digit", minute: "2-digit", hour12: false });
+  const vanTime = () => { const [h, , m] = vanFmt.formatToParts(new Date()).map((p) => p.value); return `${h}H${m}M`; };
+  const slotTime = (key) => {
+    const exp = S.cv.experience, startOf = (e) => monthOf(String(e.when).split("–")[0]);
+    switch (key) {
+      case "about": case "profile": return `${span(nowM() - Math.min(...exp.map(startOf)))} in games`;
+      case "experience": return exp[0] ? `${span(nowM() - startOf(exp[0]))} at ${esc(exp[0].org)}` : "";
+      case "work": return `${span(nowM() - firstYear(games) * 12)} making games`;
+      case "photography": return `${span(nowM() - firstYear(photos) * 12)} behind the lens`;
+      case "faq": { const words = S.faq.map(([q, a]) => `${q} ${a}`).join(" ").split(/\s+/).length, s = Math.round((words / 230) * 60); return `${pad2(Math.floor(s / 60))}M${pad2(s % 60)}S read`; }
+      case "contact": return `<span class="slot-van">${vanTime()}</span> in Vancouver`; // kept ticking by the clock
+      default: return "";
+    }
+  };
+  const secHead = (title, lede, link, kicker) => {
+    const key = String(kicker || title).toLowerCase(), code = SEC_CODES[key], time = slotTime(key);
+    return FEAT.slots ? `
     <div class="sec-head fade">
-      <div>${kicker ? `<div class="sec-kicker">(${esc(kicker)})</div>` : ""}<h2 class="sec-title">${esc(title)}</h2>${barcode(title)}${lede ? `<p class="sec-lede">${esc(lede)}</p>` : ""}</div>
+      <div><div class="sec-kicker slot-kicker"><i class="slot-ico"></i>Slot ${pad2(++slotN)}${kicker ? ` · ${esc(kicker)}` : ""}${time ? ` · ${time}` : ""}</div><h2 class="sec-title">${esc(title)}</h2>${mark(title, undefined, code)}${lede ? `<p class="sec-lede">${esc(lede)}</p>` : ""}</div>
+      ${link ? `<a class="sec-link slot-load" href="${link[1]}">Load ${esc(link[0])} ▸</a>` : ""}
+    </div>` : `
+    <div class="sec-head fade">
+      <div>${kicker ? `<div class="sec-kicker">(${esc(kicker)})</div>` : ""}<h2 class="sec-title">${esc(title)}</h2>${mark(title, undefined, code)}${lede ? `<p class="sec-lede">${esc(lede)}</p>` : ""}</div>
       ${link ? `<a class="sec-link" href="${link[1]}">(${esc(link[0])})</a>` : ""}
     </div>`;
+  };
 
-  const tile = (w) => `<div class="gen-tile" style="--acc:${esc(w.accent || "var(--sky)")}"><small>${esc(w.tag)}</small><b>${esc(w.title)}</b>${barcode(w.title, 18)}</div>`;
+  const tile = (w) => `<div class="gen-tile" style="--acc:${esc(w.accent || "var(--sky)")}"><small>${esc(w.tag)}</small><b>${esc(w.title)}</b>${mark(w.title, 18)}</div>`;
   const workCard = (w) => `
     <a class="work fade" href="#/works/${slug(w.title)}">
       <div class="thumb">${w.cover ? `<img src="${esc(asset(w.cover))}" alt="" loading="lazy">` : tile(w)}</div>
@@ -83,7 +149,7 @@
     <footer class="foot">
       <div>(c) ${new Date().getFullYear()} ${esc(S.name)}<br><a href="https://v2.kitannn.com">← classic site</a></div>
       <a href="#top" data-top>Back to top ↑</a>
-      ${barcode(S.name)}
+      ${mark(S.name, undefined, "sonic")}
     </footer>`;
 
   // ---------- pages ----------
@@ -101,6 +167,82 @@
   const cloudHomes = [{ x: 0.1, y: 0.16, w: 132 }, { x: 0.93, y: 0.1, w: 112 }, { x: 0.5, y: 0.92, w: 150 }, { x: 0.86, y: 0.78, w: 116 }];
   const clouds = () => `<div class="cloud-layer" aria-hidden="true">${cloudHomes.map((c, i) => `
     <div class="cloud" data-hx="${c.x}" data-hy="${c.y}" style="--cw:${c.w}px"><canvas data-gl="cloud" data-seed="${(i * 1.7).toFixed(1)}"></canvas><i></i><i></i><i></i><i></i></div>`).join("")}</div>`;
+  // ---------- hero gadgets (FEAT.devices): 3D game devices in place of the clouds ----------
+  // Each gadget is a stack of thin layers (its body's thickness) under a detailed front face, so it reads as a solid
+  // object as the physics turns it. Screens are live DOM: handhelds replay a boot screen when the cursor bumps them,
+  // the phone wakes up to an Instagram view, the controller just gets knocked around.
+  // Each slab is a stack of thin layers. `curve` pulls the deeper layers inwards so the body tapers to a rounded
+  // back (real handhelds are domed behind, not slab-sided) — it also keeps thick bodies from reading as bricks.
+  const devLayers = (d, curve) => {
+    let s = "";
+    for (let z = 1.2; z < d; z += 1.2) s += `<i style="--z:${z.toFixed(1)};--in:${(curve * Math.pow(z / d, 3)).toFixed(2)}px"></i>`;
+    return s + `<i class="dl-back" style="--z:${d};--in:${curve}px"></i>`;
+  };
+  const devPart = (cls, w, h, d, face, style = "", back = "", curve = 2, extra = "") => `<div class="dp ${cls}" style="width:${w}px;height:${h}px;--d:${d};--dh:${d}px;--bin:${curve}px;${style}">${devLayers(d, curve)}<div class="df">${face}</div><div class="db">${back}</div>${extra}</div>`;
+  // a raised hump on the back (the Game Boy's battery bulge): extra layers behind the back plane, doming as they go
+  const devBump = (x, y, w, h, from, to, face) => {
+    let s = "";
+    for (let z = from; z <= to; z += 1.2) {
+      const i = (z - from) * 0.5, last = z + 1.2 > to;
+      s += `<i class="bmp${last ? " bmp-face" : ""}" style="left:${(x + i).toFixed(1)}px;top:${(y + i).toFixed(1)}px;width:${(w - i * 2).toFixed(1)}px;height:${(h - i * 2).toFixed(1)}px;--z:${z.toFixed(1)}">${last ? face : ""}</i>`;
+    }
+    return s;
+  };
+  const screws = (m = 7) => [`left:${m}px;top:${m}px`, `right:${m}px;top:${m}px`, `left:${m}px;bottom:${m}px`, `right:${m}px;bottom:${m}px`].map((p) => `<i class="dv-screw" style="${p}"></i>`).join("");
+  const devScreen = (cls, idle, boot) => `<div class="scr ${cls}"><div class="scr-idle">${idle}</div>${boot ? `<div class="scr-boot">${boot}</div>` : ""}</div>`;
+  const devImg = (src) => (src ? `<img src="${esc(asset(src))}" alt="" draggable="false">` : "");
+  const bootLetters = (t) => [...t].map((c, i) => `<b style="--i:${i}">${c === " " ? "&nbsp;" : esc(c)}</b>`).join("");
+  // Proportions come from the real hardware (mm → units): Game Boy Color 78 x 133.5 x 27.4, Nintendo DS
+  // 148.7 x 84.7 x 28.9 closed, Switch 2 10.7 x 4.5 x 0.55 in, iPhone 18 Pro Max 78 x 163.4 x 8.75.
+  // Proportions come from the real hardware (mm → units): Game Boy Color 78 x 133.5 x 27.4, Nintendo DS
+  // 148.7 x 84.7 x 28.9 closed, Switch 2 10.7 x 4.5 x 0.55 in, iPhone 18 Pro Max 78 x 163.4 x 8.75.
+  // Backs and edges follow the real hardware too: the Game Boy's domed battery back and rear cart slot, the DS's
+  // battery cover and Slot-2 lip, the Switch's full-width kickstand, the phone's camera plateau and side buttons.
+  const GADGETS = [
+    { id: "gbc", W: 84, H: 144, k: 1, x: 0.12, y: 0.3, body: () => devPart("gbc", 84, 144, 21, `
+      <div class="gbc-bezel"><i class="gbc-led"></i>${devScreen("gbc-scr", `${devImg("images/birbkit-256.jpg")}<span class="scr-blink">▶ START</span>`, `<div class="boot-gbc">${bootLetters("GAME BOY")}</div><small class="boot-sub">COLOR</small>`)}<em>GAME BOY COLOR</em></div>
+      <i class="dv-dpad" style="left:10px;top:83px"></i><i class="dv-btn" style="left:50px;top:98px"></i><i class="dv-btn" style="left:64px;top:88px"></i>
+      <i class="dv-pill" style="left:28px;top:124px"></i><i class="dv-pill" style="left:43px;top:124px"></i><i class="dv-grille" style="left:58px;top:117px"></i>`,
+      "",
+      // back (per the Kiwi product shot): a thin recessed cart slot under the top lip with the Game Pak sitting
+      // flush in it, the model label, then the battery door on the hump below
+      `<i class="gb-slot-rim"></i><i class="gb-bay"><i class="gb-pak-edge"></i></i><i class="gb-label"></i>${screws(6)}`, 4,
+      devBump(11, 56, 62, 76, 21, 27.5, `<span class="gb-emboss">GAME BOY</span><i class="gb-tab"></i>`) +
+      `<div class="de de-top"><i class="gb-mouth"></i><i class="gb-power"></i><i class="gb-ir"></i></div>`  /* a div: the .dp > i layer rule must not touch the edge faces */ +
+      "") },
+    { id: "ds", W: 120, H: 138, k: 0.92, x: 0.45, y: 0.85, body: () =>
+      // open at about 157°: from the inside, the lid leans 23° toward you, with a hinge bar along the seam
+      devPart("ds ds-lid", 120, 68, 11, `<i class="ds-spk" style="left:9px"></i><i class="ds-spk" style="right:9px"></i>${devScreen("ds-scr", devImg(games[1]?.cover), `<div class="boot-ds">Nintendo<b>DS</b></div>`)}`,
+        "top:0;transform-origin:50% 100%;transform:rotateX(-23deg)", `<span class="ds-mark">NINTENDO<b>DS</b></span>`, 3.5) +
+      devPart("ds", 120, 68, 11, `<i class="ds-hinge"></i><i class="dv-dpad sm" style="left:7px;top:26px"></i>${devScreen("ds-scr", `<div class="ds-menu"><span>▶ PLAY</span><span>PROFILE</span></div>`, `<div class="boot-ds2">Touch the Touch Screen to continue.</div>`)}<i class="dv-abxy" style="left:92px;top:22px"></i><i class="dv-pill" style="left:50px;top:58px"></i><i class="dv-pill" style="left:62px;top:58px"></i>`,
+        "top:70px", `<i class="ds-batt"></i><i class="ds-stylus"></i><i class="ds-gba"></i>${screws(6)}`, 3.5) },
+    { id: "sw2", W: 190, H: 80, k: 0.9, x: 0.82, y: 0.72, body: () =>
+      // the Joy-Con 2 sit proud of the console body (0.55 in slab, 1.2 in over the sticks)
+      devPart("jc jc-l", 25, 80, 16, `<i class="jc-rail"></i><i class="dv-stick" style="left:5px;top:13px"></i><i class="dv-abxy" style="left:3px;top:44px"></i>`, "left:0", `<i class="jc-lock"></i><i class="jc-sr"></i>`, 4) +
+      devPart("sw2", 140, 80, 10, `<div class="sw-bezel">${devScreen("sw-scr", devImg(games[0]?.hero || games[0]?.cover), `<div class="boot-sw"><span class="sw-nin">Nintendo</span><span class="sw-logo"><i class="sw-l"></i><i class="sw-r"></i><b class="sw-two">2</b></span></div>`)}</div>`,
+        "left:25px", `<i class="sw-mag" style="left:2px"></i><i class="sw-mag" style="right:2px"></i><i class="sw-stand"><i class="sw-notch"></i></i>`, 2) +
+      devPart("jc jc-r", 25, 80, 16, `<i class="jc-rail"></i><i class="dv-abxy" style="left:3px;top:13px"></i><i class="dv-stick" style="left:5px;top:47px"></i>`, "left:165px", `<i class="jc-lock"></i><i class="jc-sr"></i>`, 4) },
+    { id: "iphone", W: 80, H: 168, k: 0.78, x: 0.62, y: 0.18, body: () => devPart("iph", 80, 168, 9, `
+      <div class="iph-scr"><div class="ig">
+        <div class="ig-top"><b>kitannn</b><span>≡</span></div>
+        <div class="ig-head">${devImg("images/birbkit-256.jpg")}<div><b>${esc(S.name)}</b><span>game designer · photos</span><span>Vancouver</span></div></div>
+        <div class="ig-btns"><span>Follow</span><span>Message</span></div>
+        <div class="ig-grid">${photos.flatMap((p) => [p.cover, ...(p.images || [])]).filter(Boolean).slice(0, 12).map(devImg).join("")}</div>
+        <div class="ig-tabs"><i>⌂</i><i>⌕</i><i>⊕</i><i>▷</i><i>◯</i></div>
+      </div></div><i class="island"></i><i class="ip-btn ip-vol-a"></i><i class="ip-btn ip-vol-b"></i><i class="ip-btn ip-act"></i><i class="ip-btn ip-pwr"></i>`,
+      "", `<i class="ip-plateau"><i class="ip-lens" style="left:8px;top:5px"></i><i class="ip-lens" style="left:27px;top:5px"></i><i class="ip-lens" style="left:17px;top:19px"></i><i class="ip-flash"></i><i class="ip-lidar"></i></i><i class="ip-mark"></i>`, 1.2) },
+  ];
+  const devices = () => {
+    const phone = matchMedia("(max-width: 640px)").matches;
+    // bigger screen, bigger gadgets — the same curve the hero windows use for --s
+    const sc = Math.max(1, Math.min(1.8, innerWidth / 1280, innerHeight / 800));
+    return `<div class="cloud-layer dev-layer" aria-hidden="true">${GADGETS.map((g) => {
+      const k = +(g.k * sc * (phone ? 0.6 : 1)).toFixed(3);
+      return `
+    <div class="dev dev-${g.id}" data-dev="${g.id}" data-hx="${g.x}" data-hy="${g.y}" data-k="${k}" style="width:${Math.round(g.W * k)}px;height:${Math.round(g.H * k)}px">
+      <div class="dev-rot" style="width:${g.W}px;height:${g.H}px;margin:${-g.H / 2}px 0 0 ${-g.W / 2}px">${g.body()}</div></div>`;
+    }).join("")}</div>`;
+  };
 
   // ---------- VCR works reel ----------
   const reel = S.work.filter((w) => w.featured);
@@ -111,11 +253,17 @@
         <canvas data-gl="vcr"></canvas>
         <div class="vcr-fallback">${reel.map((w, i) => (w.hero || w.cover ? `<img data-i="${i}" src="${esc(asset(w.hero || w.cover))}" alt="">` : `<div data-i="${i}">${tile(w)}</div>`)).join("")}</div>
         <div class="vcr-lines" aria-hidden="true"></div>
+        ${FEAT.cartridge ? `
+        <div class="vcr-nofeed" aria-hidden="true"><b>Insert cartridge</b><span>Slot A · no data</span></div>
+        <div class="vcr-hud vcr-tl"><div class="rec">Select game</div>
+          <div class="carts">${reel.map((w, i) => { const src = w.hero || w.cover; return `<button type="button" class="cart" data-reel="${i}" aria-label="${esc(w.title)}"><span class="cart-label">${src ? `<img src="${esc(asset(src))}" alt="" loading="lazy">` : `<span class="cart-gen" style="--acc:${esc(w.accent || "var(--sky)")}">${esc(w.title)}</span>`}</span><span class="cart-name">${esc(w.title)}</span></button>`; }).join("")}</div></div>
+        <div class="vcr-hud vcr-tr">Cart <span class="vcr-ch">01</span> / ${String(reel.length).padStart(2, "0")}</div>
+        <div class="vcr-hud vcr-bl"><div class="play"><span class="p-on">Press start</span><span class="p-off">No cartridge</span></div><div class="tc">FRAME 000000</div></div>` : `
         <div class="vcr-nofeed" aria-hidden="true"><b>No feed</b><span>CH-01 · signal lost</span></div>
         <div class="vcr-hud vcr-tl"><div class="rec"><i></i>Work</div>
           <ol>${reel.map((w, i) => `<li><button type="button" data-reel="${i}">${i + 1}: ${esc(w.title)}<b> ←</b></button></li>`).join("")}</ol></div>
         <div class="vcr-hud vcr-tr">CH-<span class="vcr-ch">01</span> · SP</div>
-        <div class="vcr-hud vcr-bl"><div class="play"><span class="p-on">PLAY ▶</span><span class="p-off">STOP ■</span></div><div class="tc">00.00.00.00</div></div>
+        <div class="vcr-hud vcr-bl"><div class="play"><span class="p-on">PLAY ▶</span><span class="p-off">STOP ■</span></div><div class="tc">00.00.00.00</div></div>`}
         <div class="vcr-wins"></div>
       </div>
     </section>`;
@@ -132,10 +280,10 @@
               <div class="win-body"><a class="reveal" href="${w.href}" aria-label="Open ${esc(w.title)}"><img src="${esc(asset(w.src))}" alt="" draggable="false"></a></div>
             </div>
           </div>`).join("")}
-        ${clouds()}
-        <div class="hero-caption"><p><b>${esc(S.name)}</b><br>game designer<br>portfolio</p>${barcode(S.name)}</div>
+        ${FEAT.devices ? devices() : clouds()}
+        <div class="hero-caption"><p><b>${esc(S.name)}</b><br>game designer<br>portfolio</p>${mark(S.name, undefined, "konami")}</div>
         <button class="pill ghost restore" type="button" hidden>Restore windows ↺</button>
-        <div class="hero-hint">drag the windows · poke the clouds</div>
+        <div class="hero-hint">drag the windows · ${FEAT.devices ? "bump the gadgets" : "poke the clouds"}</div>
       </section>
 
       <section class="section">
@@ -482,7 +630,7 @@
         ${(w.links || []).length ? `<div class="m-links">${w.links.map(([l, u]) => `<a class="pill" href="${esc(u)}" target="_blank" rel="noopener">${esc(l)}</a>`).join("")}</div>` : ""}
         <button class="pill ghost m-close" type="button" data-close>Close</button>
       </div>
-      <div class="m-foot"><span>(c) ${esc(S.name)} · ${esc(w.year)}</span>${barcode(w.title)}</div>`;
+      <div class="m-foot"><span>(c) ${esc(S.name)} · ${esc(w.year)}</span>${mark(w.title)}</div>`;
     modal.hidden = false;
     document.body.style.overflow = "hidden";
     modalWin.querySelector(".modal-scroll").scrollTop = 0;
@@ -636,6 +784,100 @@
       mouse.px = mouse.x; mouse.py = mouse.y;
     };
 
+    // Gadgets drift like 109ichiki's objects: each eases toward a very slow cruising speed on a heading that
+    // wanders, tumbles the whole time, bounces off the hero's edges and glides for a long while after a shove.
+    // Nothing parks, nothing stops, and nothing ever turns to face front.
+    const flock = [...hero.querySelectorAll(".dev")].map((el) => ({
+      el, rot: el.querySelector(".dev-rot"), kind: el.dataset.dev, k: +el.dataset.k,
+      w: el.offsetWidth, h: el.offsetHeight, r: Math.sqrt(el.offsetWidth * el.offsetHeight) * 0.47,
+      hx: +el.dataset.hx, hy: +el.dataset.hy, x: -400, y: -400, vx: 0, vy: 0,
+      heading: rand(0, Math.PI * 2), cruise: rand(13, 24),                     // px/s: a slow float
+      yaw: rand(0, 360), roll: rand(0, 360), pitch: rand(0, Math.PI * 2),      // never reset, never aligned
+      vyaw: rand(4, 9) * (Math.random() < 0.5 ? -1 : 1),                       // deg/s: turns all the way round
+      vroll: rand(2, 5) * (Math.random() < 0.5 ? -1 : 1),                      // deg/s
+      vpitch: rand(0.05, 0.11),                                                // rad/s of the pitch wobble
+      live: false,
+    }));
+    flock.forEach((b) => { b.byaw = b.vyaw; b.broll = b.vroll; b.tiltBias = 0; });
+
+    const placeDev = (b) => {
+      b.el.style.transform = `translate3d(${(b.x - b.w / 2).toFixed(1)}px, ${(b.y - b.h / 2).toFixed(1)}px, 0)`;
+      b.rot.style.transform = `scale(${b.k}) rotateX(${(Math.sin(b.pitch) * 16 + b.tiltBias).toFixed(1)}deg) rotateY(${b.yaw.toFixed(1)}deg) rotateZ(${b.roll.toFixed(1)}deg)`;
+    };
+    // cursor bumps: handhelds replay their boot screen, the phone wakes to Instagram (and locks again after 8 s)
+    const bump = (b) => {
+      const el = b.el;
+      if (b.kind === "iphone") { el.classList.add("on"); clearTimeout(b.off); b.off = setTimeout(() => el.classList.remove("on"), 8000); return; }
+      if (el.classList.contains("boot")) return;
+      el.classList.add("boot");
+      setTimeout(() => el.classList.remove("boot"), 2900);
+    };
+    const dropDevs = () => flock.forEach((b) => {
+      b.x = b.hx * W; b.y = b.hy * H;
+      b.vx = Math.cos(b.heading) * b.cruise; b.vy = Math.sin(b.heading) * b.cruise;
+      b.live = true;
+      b.el.classList.add("in");
+      placeDev(b);
+    });
+    flock.forEach((b) => { b.x = b.hx * W; b.y = b.hy * H; placeDev(b); });
+    const stepDevs = (dt) => {
+      const clampV = (v) => Math.max(-3000, Math.min(3000, v));
+      const mvx = clampV((mouse.x - mouse.px) / dt), mvy = clampV((mouse.y - mouse.py) / dt); // cursor velocity
+      const ease = 1 - Math.exp(-0.25 * dt);   // ~4 s to settle back to cruising: long, soft acceleration
+      const spinEase = 1 - Math.exp(-0.2 * dt);
+      for (const b of flock) {
+        if (!b.live) continue;
+        b.heading += (Math.random() - 0.5) * 0.3 * dt;     // the course wanders, slowly
+        b.vx += (Math.cos(b.heading) * b.cruise - b.vx) * ease;
+        b.vy += (Math.sin(b.heading) * b.cruise - b.vy) * ease;
+        if (mouse.in && fine && dt > 0) {
+          const dx = b.x - mouse.x, dy = b.y - mouse.y, d = Math.hypot(dx, dy), R = b.r + 14;
+          if (d < R && d > 0.01) {
+            const nx = dx / d, ny = dy / d, vn = mvx * nx + mvy * ny;
+            b.x = mouse.x + nx * R; b.y = mouse.y + ny * R;
+            const push = Math.max(vn, 0) * 0.6 + 130;       // a shove it then glides off for a few seconds
+            b.vx += nx * push + mvx * 0.25; b.vy += ny * push + mvy * 0.25;
+            const sp = Math.hypot(b.vx, b.vy), max = 900;
+            if (sp > max) { b.vx *= max / sp; b.vy *= max / sp; }
+            b.heading = Math.atan2(b.vy, b.vx);
+            b.vyaw += (mvx * 0.05 + nx * 40) * 0.5; b.vroll += (mvy * 0.04 + ny * 25) * 0.5; // sets it turning
+            bump(b);
+          }
+        }
+      }
+      for (let i = 0; i < flock.length; i++) for (let j = i + 1; j < flock.length; j++) {
+        const a = flock[i], c = flock[j];
+        if (!a.live || !c.live) continue;
+        const dx = c.x - a.x, dy = c.y - a.y, d = Math.hypot(dx, dy), R = a.r + c.r;
+        if (d < R && d > 0.01) {
+          const nx = dx / d, ny = dy / d, o = (R - d) / 2;
+          a.x -= nx * o; a.y -= ny * o; c.x += nx * o; c.y += ny * o;
+          const rel = (c.vx - a.vx) * nx + (c.vy - a.vy) * ny;
+          if (rel < 0) {
+            const k = -rel * 0.9;
+            a.vx -= nx * k; a.vy -= ny * k; c.vx += nx * k; c.vy += ny * k;
+            a.heading = Math.atan2(a.vy, a.vx); c.heading = Math.atan2(c.vy, c.vx);
+            a.vyaw -= 6; c.vyaw += 6;
+          }
+        }
+      }
+      for (const b of flock) {
+        if (!b.live) continue;
+        b.x += b.vx * dt; b.y += b.vy * dt;
+        const m = b.r * 0.7;
+        let bounced = false;
+        if (b.x < m) { b.x = m; b.vx = Math.abs(b.vx) * 0.85; bounced = true; }
+        if (b.x > W - m) { b.x = W - m; b.vx = -Math.abs(b.vx) * 0.85; bounced = true; }
+        if (b.y < m) { b.y = m; b.vy = Math.abs(b.vy) * 0.85; bounced = true; }
+        if (b.y > H - m) { b.y = H - m; b.vy = -Math.abs(b.vy) * 0.85; bounced = true; }
+        if (bounced) { b.heading = Math.atan2(b.vy, b.vx); b.vroll += (Math.random() - 0.5) * 12; }
+        b.vyaw += (b.byaw - b.vyaw) * spinEase; b.vroll += (b.broll - b.vroll) * spinEase; // back to a lazy tumble
+        b.yaw += b.vyaw * dt; b.roll += b.vroll * dt; b.pitch += b.vpitch * dt;
+        placeDev(b);
+      }
+      mouse.px = mouse.x; mouse.py = mouse.y;
+    };
+
     let dropped = false, lastNow = 0;
     const loop = (now) => {
       if (!hero.isConnected) return;
@@ -650,8 +892,8 @@
         l.style.transform = `translate(${l._tx}px, ${l._ty}px)`;
       }
       wins.forEach(syncLens);
-      if (!dropped && document.body.classList.contains("ready")) { dropped = true; setTimeout(drop, reduceMotion ? 0 : 900); }
-      if (!reduceMotion) stepClouds(dt);
+      if (!dropped && document.body.classList.contains("ready")) { dropped = true; setTimeout(FEAT.devices ? dropDevs : drop, reduceMotion ? 0 : 900); }
+      if (!reduceMotion) (FEAT.devices ? stepDevs : stepClouds)(dt);
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
@@ -738,7 +980,7 @@
           <small>${esc(w.tag)} · ${esc(w.year)}</small>
           <h3>${esc(w.title)}</h3>
           <p>${esc(blurb(w))}</p>
-          <div class="vcr-win-foot"><a class="pill" href="#/works/${slug(w.title)}">View project →</a>${barcode(w.title)}</div>
+          <div class="vcr-win-foot"><a class="pill" href="#/works/${slug(w.title)}">View project →</a>${mark(w.title)}</div>
         </div>`;
       box.appendChild(el);
       box.hidden = false;
@@ -794,7 +1036,8 @@
       const r = stick.getBoundingClientRect();
       if (live && r.bottom > 0 && r.top < innerHeight) {
         const f = Math.floor((performance.now() - t0) / (1000 / 30));
-        tc.textContent = `${pad(Math.floor(f / 108000))}.${pad(Math.floor(f / 1800) % 60)}.${pad(Math.floor(f / 30) % 60)}.${pad(f % 30)}`;
+        if (FEAT.cartridge) tc.textContent = `FRAME ${String(f * 2).padStart(6, "0")}`; // 60fps frame counter
+        else tc.textContent = `${pad(Math.floor(f / 108000))}.${pad(Math.floor(f / 1800) % 60)}.${pad(Math.floor(f / 30) % 60)}.${pad(f % 30)}`;
       }
       requestAnimationFrame(tick);
     };
@@ -809,12 +1052,14 @@
   // Same look as the intro's H: a dark, noisy CRT screen with a letter-shaped window cut out of it and a thin outline.
   // Letters are blocky, built from 5 rects each (in a 5x6 box, stroke 1) so any letter can morph into any other.
   // Unused slots are zero-size rects tucked inside a stroke. Rects overlap rather than abut, so the union has no seams.
+  // Home starts as H — the letter loaded through in the intro — and becomes S (for START) after the first jump
   const PAGE_LETTERS = { home: "H", works: "W", profile: "P", contact: "C" };
   const GLYPHS_PT = {
     H: { rects: [[0, 0, 1, 6], [4, 0, 1, 6], [0.5, 2.5, 4, 1], [2.5, 3, 0, 0], [4.5, 5.5, 0, 0]], focus: [2.5, 3] },   // crossbar, like the intro
     W: { rects: [[0, 0, 1, 6], [4, 0, 1, 6], [0, 5, 5, 1], [2, 2.5, 1, 3.5], [4.5, 5.5, 0, 0]], focus: [2.5, 4] },     // middle upright
     P: { rects: [[0, 0, 1, 6], [4, 0, 1, 3.5], [0, 2.5, 5, 1], [0, 0, 5, 1], [4.5, 3, 0, 0]], focus: [2.5, 3] },       // bowl's lower bar
     C: { rects: [[0, 0, 1, 6], [4, 0, 1, 1.8], [0, 5, 5, 1], [0, 0, 5, 1], [4, 4.2, 1, 1.8]], focus: [0.5, 3] },       // spine
+    S: { rects: [[0, 0, 1, 3.5], [4, 2.5, 1, 3.5], [0, 2.5, 5, 1], [0, 0, 5, 1], [0, 5, 5, 1]], focus: [2.5, 3] },   // middle bar
   };
   const SVGNS = "http://www.w3.org/2000/svg";
   let pt = null;
@@ -912,6 +1157,7 @@
     stopHelix = null;
     document.body.classList.remove("work-wheel");
     window.KGL?.unmount();
+    slotN = 0;
     app.innerHTML = pages[page](workFilter);
     window.KGL?.mount(app);
     document.querySelectorAll(".pill-nav a").forEach((a) => a.classList.toggle("active", a.dataset.page === page));
@@ -950,6 +1196,7 @@
           settleModal(page, id);
         }, () => {
           transitioning = false;
+          if (FEAT.gameMenu) PAGE_LETTERS.home = "S"; // the H was the way in; from here on Home is START
           if (pendingRoute) { pendingRoute = false; route(); }
         });
         return;
@@ -960,6 +1207,57 @@
     settleModal(page, id);
   };
   addEventListener("hashchange", route);
+
+  // ---------- interactive barcodes (FEAT.inputString) ----------
+  const ARROWS = { U: 0, UR: 45, R: 90, DR: 135, D: 180, DL: 225, L: 270, UL: 315 };
+  const keyHtml = (t) => {
+    if (t === "-") return `<i class="k-sep">-</i>`;
+    if (t in ARROWS) return `<button type="button" class="key k-arrow" data-k style="--r:${ARROWS[t]}deg" aria-label="${t}"><span>▲</span></button>`;
+    if (t[0] === "#") return `<button type="button" class="key k-cap" data-k>${esc(t.slice(1))}</button>`;
+    return `<button type="button" class="key k-btn" data-k>${esc(t)}</button>`;
+  };
+  const openMark = (mk) => {
+    const [name, seq] = CODES[mk.dataset.code] || CODES.konami;
+    mk._bar = mk._bar || mk.innerHTML;
+    mk.innerHTML = `<span class="mk-in">${seq.split(" ").map(keyHtml).join("")}<span class="mk-name">${esc(name)}</span></span>`;
+    mk.classList.add("open");
+  };
+  const closeMark = (mk) => { if (mk._bar) mk.innerHTML = mk._bar; mk.classList.remove("open", "combo"); };
+  const comboBurst = (mk) => {
+    mk.classList.add("combo");
+    const r = mk.getBoundingClientRect(), cols = ["#ffc94a", "#7cc6ff", "#ff9cc0", "#e9e6f0"];
+    for (let i = 0; i < 26; i++) {
+      const s = document.createElement("i"), a = Math.random() * Math.PI * 2, d = 40 + Math.random() * 70;
+      s.className = "mk-spark";
+      s.style.cssText = `--x:${(Math.random() * r.width).toFixed(0)}px;--y:${(r.height / 2).toFixed(0)}px;--dx:${(Math.cos(a) * d).toFixed(0)}px;--dy:${(Math.sin(a) * d).toFixed(0)}px;--c:${cols[i % 4]}`;
+      mk.appendChild(s);
+      setTimeout(() => s.remove(), 1000);
+    }
+    const pop = document.createElement("b");
+    pop.className = "mk-pop";
+    pop.textContent = "Code accepted!";
+    mk.appendChild(pop);
+    setTimeout(() => pop.remove(), 1500);
+    setTimeout(() => mk.classList.remove("combo"), 700);
+  };
+  document.addEventListener("click", (e) => {
+    const mk = e.target.closest(".mk");
+    if (!mk || mk.closest("a")) return; // marks inside cards stay plain (the card link wins)
+    e.preventDefault();
+    if (!mk.classList.contains("open")) openMark(mk);
+    else {
+      const k = e.target.closest("[data-k]");
+      if (k && !k.classList.contains("lit")) {
+        k.classList.add("lit");
+        if (!mk.querySelector("[data-k]:not(.lit)")) comboBurst(mk);
+      }
+    }
+    clearTimeout(mk._t);
+    mk._t = setTimeout(() => closeMark(mk), 7000); // back to the barcode after 7 s idle
+  });
+  document.addEventListener("keydown", (e) => {
+    if ((e.key === "Enter" || e.key === " ") && e.target.classList?.contains("mk")) { e.preventDefault(); e.target.click(); }
+  });
 
   // ---------- global handlers ----------
   document.addEventListener("click", (e) => {
@@ -983,24 +1281,74 @@
 
   // socials + mark
   document.getElementById("mark-text").textContent = S.name;
+  // game-menu nav (FEAT.gameMenu): START / WORK / PLAYER / CONTACT (routes stay the same)
+  if (FEAT.gameMenu) document.querySelectorAll(".pill-nav a").forEach((a) => { a.textContent = { home: "Start", works: "Work", profile: "Profile", contact: "Contact" }[a.dataset.page]; });
   document.getElementById("socials").innerHTML = ["Instagram", "GitHub"].filter((k) => net[k]).map((k) => `<a class="pill" href="${esc(net[k])}" target="_blank" rel="noopener">${k} ↗</a>`).join("");
+
+  // The Instagram / GitHub pills sit off the right edge until the cursor comes up to that corner (FEAT.tuckNav)
+  if (FEAT.tuckNav && matchMedia("(hover: hover)").matches) {
+    let peekT = 0;
+    addEventListener("pointermove", (e) => {
+      const near = e.clientX > innerWidth - 320 && e.clientY < 130;
+      if (near) {
+        clearTimeout(peekT);
+        document.body.classList.add("nav-peek");
+      } else if (document.body.classList.contains("nav-peek")) {
+        clearTimeout(peekT);
+        peekT = setTimeout(() => document.body.classList.remove("nav-peek"), 450);
+      }
+    }, { passive: true });
+  }
 
   // clock (Vancouver)
   const clock = document.querySelector(".clock");
   const fmt = new Intl.DateTimeFormat("en-GB", { timeZone: "America/Vancouver", hour: "2-digit", minute: "2-digit", hour12: false });
-  const setClock = () => { const [h, , m] = fmt.formatToParts(new Date()).map((p) => p.value); clock.innerHTML = `${h}<b>:</b>${m}`; };
+  const setClock = () => {
+    const [h, , m] = fmt.formatToParts(new Date()).map((p) => p.value);
+    clock.innerHTML = `${h}<b>:</b>${m}`;
+    document.querySelectorAll(".slot-van").forEach((s) => { s.textContent = vanTime(); }); // Contact's save slot
+  };
   setClock();
   setInterval(setClock, 10000);
 
-  // theme
+  // theme: the dots cycle dark → light (→ yolk, with FEAT.yolkTheme)
   const root = document.documentElement;
-  try { if (localStorage.getItem("kv2-theme") === "light") root.dataset.theme = "light"; } catch {}
+  const THEMES = FEAT.yolkTheme ? ["dark", "light", "yolk"] : ["dark", "light"];
+  const setTheme = (t) => { if (t === "dark") delete root.dataset.theme; else root.dataset.theme = t; };
+  try { const t = localStorage.getItem("kv2-theme"); if (THEMES.includes(t)) setTheme(t); } catch {}
   document.querySelector(".theme-dots").addEventListener("click", () => {
-    const light = root.dataset.theme !== "light";
-    if (light) root.dataset.theme = "light"; else delete root.dataset.theme;
-    try { localStorage.setItem("kv2-theme", light ? "light" : "dark"); } catch {}
+    const next = THEMES[(THEMES.indexOf(root.dataset.theme || "dark") + 1) % THEMES.length];
+    setTheme(next);
+    try { localStorage.setItem("kv2-theme", next); } catch {}
     dispatchEvent(new Event("kv2-theme"));
   });
+
+  // FONT button (FEAT.fontToggle): titles switch to a pixel display font; off = IBM Plex Mono everywhere
+  const fontBtn = document.querySelector(".font-toggle");
+  const setFont = (on) => { if (on) root.dataset.font = "display"; else delete root.dataset.font; fontBtn.setAttribute("aria-pressed", String(on)); };
+  if (FEAT.fontToggle) {
+    try { setFont(localStorage.getItem("kv2-font") === "display"); } catch {}
+    fontBtn.addEventListener("click", () => {
+      const on = root.dataset.font !== "display";
+      setFont(on);
+      try { localStorage.setItem("kv2-font", on ? "display" : "mono"); } catch {}
+      dispatchEvent(new Event("kv2-theme")); // WebGL titles re-rasterise in the new font
+    });
+  }
+
+  // viewfinder readout (FEAT.viewfinder): ISO follows the theme, the shutter speeds up while you scroll
+  if (FEAT.viewfinder) {
+    const iso = document.querySelector(".vf-iso"), sh = document.querySelector(".vf-sh");
+    const setIso = () => { iso.textContent = `ISO ${{ light: 100, yolk: 400 }[root.dataset.theme] || 3200}`; };
+    setIso();
+    addEventListener("kv2-theme", setIso);
+    let lastY = scrollY, speed = 0;
+    setInterval(() => {
+      speed = speed * 0.5 + Math.abs(scrollY - lastY) * 0.5;
+      lastY = scrollY;
+      sh.textContent = speed > 400 ? "1/4000" : speed > 150 ? "1/1000" : speed > 30 ? "1/250" : "1/60";
+    }, 200);
+  }
 
   // ---------- loading screen: console boot over CRT noise → intro ----------
   const runLoader = () => {
@@ -1035,7 +1383,7 @@
     const two = (n) => String(n).padStart(2, "0");
     const now = () => new Date();
     const years = (S.stats.find(([, l]) => /years/i.test(l)) || ["", ""])[0];
-    const steps = ["LOAD PORTFOLIO DATA", "MOUNT DESKTOP WINDOWS", "COMPILE WEBGL SHADERS", "CALIBRATE CLOUD PHYSICS", "SPOOL VCR TAPE", "SYNC VANCOUVER CLOCK", "WAKE BIRBKIT"];
+    const steps = ["LOAD PORTFOLIO DATA", "MOUNT DESKTOP WINDOWS", "COMPILE WEBGL SHADERS", FEAT.devices ? "CHARGE THE HANDHELDS" : "CALIBRATE CLOUD PHYSICS", FEAT.cartridge ? "BLOW ON CARTRIDGE" : "SPOOL VCR TAPE", "SYNC VANCOUVER CLOCK", "WAKE BIRBKIT"];
     const progress = () => (forced ? 100 : (done / jobs.length) * 100);
     const leftLines = [
       "CONSOLE SETUP", "-------------",

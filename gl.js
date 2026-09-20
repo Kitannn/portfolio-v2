@@ -416,6 +416,7 @@ void main() { vec2 px = u_rect.xy + p * u_rect.zw; gl_Position = vec4(px / u_res
       }, { passive: true });
       addEventListener("kv2-theme", () => { readFg(); items.forEach((i) => { i.key = ""; }); });
       document.fonts?.ready.then(() => items.forEach((i) => { i.key = ""; }));
+      document.fonts?.addEventListener?.("loadingdone", () => items.forEach((i) => { i.key = ""; })); // e.g. the FONT toggle's font arriving
       return (ok = true);
     };
     const readFg = () => {
@@ -434,7 +435,7 @@ void main() { vec2 px = u_rect.xy + p * u_rect.zw; gl_Position = vec4(px / u_res
       range.selectNodeContents(el);
       const rects = range.getClientRects();
       const er = el.getBoundingClientRect();
-      const key = [el.textContent, cs.fontSize, cs.fontWeight, fg.join(), Math.round(er.width), rects.length].join("|");
+      const key = [el.textContent, cs.fontFamily, cs.fontSize, cs.fontWeight, fg.join(), Math.round(er.width), rects.length].join("|");
       if (key === it.key) return;
       it.key = key;
       it.skip = rects.length !== 1; // wrapped titles keep plain DOM text
