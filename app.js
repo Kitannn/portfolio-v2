@@ -10,6 +10,12 @@
 
   const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const asset = (p) => (!p || /^(https?:)?\/\//.test(p) ? p : BASE + p);
+  // Small image tiers built by tools/thumbs.py: "s" (320px) for chips, gadget screens and filmstrips, "m" (960px)
+  // for cards and windows. Full-size originals stay for the lens windows and the reel, which fill the screen.
+  const TIER = { s: "thumbs/s/", m: "thumbs/m/" };
+  const tiny = (p, tier = "s") => (p && p.startsWith("images/") ? TIER[tier] + p.slice(7).replace(/\.(jpe?g|png|webp)$/i, ".webp") : p);
+  // falls back to the original if a tier file is missing (a new image added before the next sync)
+  const fall = (p) => ` data-full="${esc(asset(p))}" onerror="this.onerror=null;this.src=this.dataset.full"`;
   const slug = (t) => t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
   const first = S.name.split(" ")[0];
   const games = S.work.filter((w) => w.kind === "game");
@@ -141,7 +147,7 @@
   const tile = (w) => `<div class="gen-tile" style="--acc:${esc(w.accent || "var(--sky)")}"><small>${esc(w.tag)}</small><b>${esc(w.title)}</b>${mark(w.title, 18)}</div>`;
   const workCard = (w) => `
     <a class="work fade" href="#/works/${slug(w.title)}">
-      <div class="thumb">${w.cover ? `<img src="${esc(asset(w.cover))}" alt="" loading="lazy">` : tile(w)}</div>
+      <div class="thumb">${w.cover ? `<img src="${esc(asset(tiny(w.cover, "m")))}"${fall(w.cover)} alt="" loading="lazy">` : tile(w)}</div>
       <div class="cap">${esc(w.title)}<small>${esc(w.kind === "game" ? "Game" : "Photo")} · ${esc(w.year)}</small></div>
     </a>`;
 
@@ -173,16 +179,18 @@
   // the phone wakes up to an Instagram view, the controller just gets knocked around.
   // Each slab is a stack of thin layers. `curve` pulls the deeper layers inwards so the body tapers to a rounded
   // back (real handhelds are domed behind, not slab-sided) — it also keeps thick bodies from reading as bricks.
+  // phones composite the same bodies at 60% size, so they get half the slices — no visible difference there
+  const LAYER_STEP = matchMedia("(max-width: 640px)").matches ? 2.4 : 1.2;
   const devLayers = (d, curve) => {
     let s = "";
-    for (let z = 1.2; z < d; z += 1.2) s += `<i style="--z:${z.toFixed(1)};--in:${(curve * Math.pow(z / d, 3)).toFixed(2)}px"></i>`;
+    for (let z = LAYER_STEP; z < d; z += LAYER_STEP) s += `<i style="--z:${z.toFixed(1)};--in:${(curve * Math.pow(z / d, 3)).toFixed(2)}px"></i>`;
     return s + `<i class="dl-back" style="--z:${d};--in:${curve}px"></i>`;
   };
   const devPart = (cls, w, h, d, face, style = "", back = "", curve = 2, extra = "") => `<div class="dp ${cls}" style="width:${w}px;height:${h}px;--d:${d};--dh:${d}px;--bin:${curve}px;${style}">${devLayers(d, curve)}<div class="df">${face}</div><div class="db">${back}</div>${extra}</div>`;
   // a raised hump on the back (the Game Boy's battery bulge): extra layers behind the back plane, doming as they go
   const devBump = (x, y, w, h, from, to, face) => {
     let s = "";
-    for (let z = from; z <= to; z += 1.2) {
+    for (let z = from; z <= to; z += LAYER_STEP) {
       const i = (z - from) * 0.5, last = z + 1.2 > to;
       s += `<i class="bmp${last ? " bmp-face" : ""}" style="left:${(x + i).toFixed(1)}px;top:${(y + i).toFixed(1)}px;width:${(w - i * 2).toFixed(1)}px;height:${(h - i * 2).toFixed(1)}px;--z:${z.toFixed(1)}">${last ? face : ""}</i>`;
     }
@@ -190,7 +198,7 @@
   };
   const screws = (m = 7) => [`left:${m}px;top:${m}px`, `right:${m}px;top:${m}px`, `left:${m}px;bottom:${m}px`, `right:${m}px;bottom:${m}px`].map((p) => `<i class="dv-screw" style="${p}"></i>`).join("");
   const devScreen = (cls, idle, boot) => `<div class="scr ${cls}"><div class="scr-idle">${idle}</div>${boot ? `<div class="scr-boot">${boot}</div>` : ""}</div>`;
-  const devImg = (src) => (src ? `<img src="${esc(asset(src))}" alt="" draggable="false">` : "");
+  const devImg = (src) => (src ? `<img src="${esc(asset(tiny(src)))}"${fall(src)} alt="" draggable="false">` : "");
   const bootLetters = (t) => [...t].map((c, i) => `<b style="--i:${i}">${c === " " ? "&nbsp;" : esc(c)}</b>`).join("");
   // Proportions come from the real hardware (mm → units): Game Boy Color 78 x 133.5 x 27.4, Nintendo DS
   // 148.7 x 84.7 x 28.9 closed, Switch 2 10.7 x 4.5 x 0.55 in, iPhone 18 Pro Max 78 x 163.4 x 8.75.
@@ -198,6 +206,9 @@
   // 148.7 x 84.7 x 28.9 closed, Switch 2 10.7 x 4.5 x 0.55 in, iPhone 18 Pro Max 78 x 163.4 x 8.75.
   // Backs and edges follow the real hardware too: the Game Boy's domed battery back and rear cart slot, the DS's
   // battery cover and Slot-2 lip, the Switch's full-width kickstand, the phone's camera plateau and side buttons.
+  // The phone's grid reuses pictures the page already loads (the featured photo covers), so waking the screen
+  // costs no extra downloads — full-size gallery photos for 20px tiles were ~1.9 MB of the home page.
+  const igShots = () => photos.flatMap((p) => [p.cover, ...(p.images || [])]).filter(Boolean).slice(0, 12);
   const GADGETS = [
     { id: "gbc", W: 84, H: 144, k: 1, x: 0.12, y: 0.3, body: () => devPart("gbc", 84, 144, 21, `
       <div class="gbc-bezel"><i class="gbc-led"></i>${devScreen("gbc-scr", `${devImg("images/birbkit-256.jpg")}<span class="scr-blink">▶ START</span>`, `<div class="boot-gbc">${bootLetters("GAME BOY")}</div><small class="boot-sub">COLOR</small>`)}<em>GAME BOY COLOR</em></div>
@@ -227,7 +238,7 @@
         <div class="ig-top"><b>kitannn</b><span>≡</span></div>
         <div class="ig-head">${devImg("images/birbkit-256.jpg")}<div><b>${esc(S.name)}</b><span>game designer · photos</span><span>Vancouver</span></div></div>
         <div class="ig-btns"><span>Follow</span><span>Message</span></div>
-        <div class="ig-grid">${photos.flatMap((p) => [p.cover, ...(p.images || [])]).filter(Boolean).slice(0, 12).map(devImg).join("")}</div>
+        <div class="ig-grid">${igShots().map(devImg).join("")}</div>
         <div class="ig-tabs"><i>⌂</i><i>⌕</i><i>⊕</i><i>▷</i><i>◯</i></div>
       </div></div><i class="island"></i><i class="ip-btn ip-vol-a"></i><i class="ip-btn ip-vol-b"></i><i class="ip-btn ip-act"></i><i class="ip-btn ip-pwr"></i>`,
       "", `<i class="ip-plateau"><i class="ip-lens" style="left:8px;top:5px"></i><i class="ip-lens" style="left:27px;top:5px"></i><i class="ip-lens" style="left:17px;top:19px"></i><i class="ip-flash"></i><i class="ip-lidar"></i></i><i class="ip-mark"></i>`, 1.2) },
@@ -251,12 +262,12 @@
     <section class="vcr" style="--n:${reel.length}" aria-label="Featured works">
       <div class="vcr-stick">
         <canvas data-gl="vcr"></canvas>
-        <div class="vcr-fallback">${reel.map((w, i) => (w.hero || w.cover ? `<img data-i="${i}" src="${esc(asset(w.hero || w.cover))}" alt="">` : `<div data-i="${i}">${tile(w)}</div>`)).join("")}</div>
+        <div class="vcr-fallback">${reel.map((w, i) => (w.hero || w.cover ? `<img data-i="${i}" data-src="${esc(asset(tiny(w.hero || w.cover, "m")))}" alt="">` : `<div data-i="${i}">${tile(w)}</div>`)).join("")}</div>
         <div class="vcr-lines" aria-hidden="true"></div>
         ${FEAT.cartridge ? `
         <div class="vcr-nofeed" aria-hidden="true"><b>Insert cartridge</b><span>Slot A · no data</span></div>
         <div class="vcr-hud vcr-tl"><div class="rec">Select game</div>
-          <div class="carts">${reel.map((w, i) => { const src = w.hero || w.cover; return `<button type="button" class="cart" data-reel="${i}" aria-label="${esc(w.title)}"><span class="cart-label">${src ? `<img src="${esc(asset(src))}" alt="" loading="lazy">` : `<span class="cart-gen" style="--acc:${esc(w.accent || "var(--sky)")}">${esc(w.title)}</span>`}</span><span class="cart-name">${esc(w.title)}</span></button>`; }).join("")}</div></div>
+          <div class="carts">${reel.map((w, i) => { const src = w.hero || w.cover; return `<button type="button" class="cart" data-reel="${i}" aria-label="${esc(w.title)}"><span class="cart-label">${src ? `<img src="${esc(asset(tiny(src)))}"${fall(src)} alt="" loading="lazy">` : `<span class="cart-gen" style="--acc:${esc(w.accent || "var(--sky)")}">${esc(w.title)}</span>`}</span><span class="cart-name">${esc(w.title)}</span></button>`; }).join("")}</div></div>
         <div class="vcr-hud vcr-tr">Cart <span class="vcr-ch">01</span> / ${String(reel.length).padStart(2, "0")}</div>
         <div class="vcr-hud vcr-bl"><div class="play"><span class="p-on">Press start</span><span class="p-off">No cartridge</span></div><div class="tc">FRAME 000000</div></div>` : `
         <div class="vcr-nofeed" aria-hidden="true"><b>No feed</b><span>CH-01 · signal lost</span></div>
@@ -272,12 +283,12 @@
     home: () => `
       <section class="hero" id="top">
         <div class="layer" data-depth="6"><div class="hero-grid"><canvas data-gl="grid" data-cells="12,10" data-amp="0.024"></canvas>${warpSvg(12, 10, 2.4)}</div></div>
-        <div class="layer" data-depth="10"><div class="hero-birb"><img src="${esc(asset(S.portrait))}" alt="${esc(S.name)}"></div></div>
+        <div class="layer" data-depth="10"><div class="hero-birb"><img src="${esc(asset(tiny(S.portrait, "m")))}"${fall(S.portrait)} alt="${esc(S.name)}"></div></div>
         ${heroWindows.filter((w) => w.src).map((w, i) => `
           <div class="layer" data-depth="${w.depth}">
             <div class="win float-win" data-win="${w.id}" data-zoom="${w.zoom}" style="--i:${i};left:${w.x}%;top:${w.y}%;width:calc(${w.w}px * var(--s, 1));height:calc(${w.h}px * var(--s, 1));z-index:${10 + i}">
               <div class="win-bar"><span>${esc(w.title)}</span><button class="win-x" type="button" aria-label="Close window" data-winclose>×</button></div>
-              <div class="win-body"><a class="reveal" href="${w.href}" aria-label="Open ${esc(w.title)}"><img src="${esc(asset(w.src))}" alt="" draggable="false"></a></div>
+              <div class="win-body"><a class="reveal" href="${w.href}" aria-label="Open ${esc(w.title)}"><img src="${esc(asset(tiny(w.src, "m")))}"${fall(w.src)} alt="" draggable="false"></a></div>
             </div>
           </div>`).join("")}
         ${FEAT.devices ? devices() : clouds()}
@@ -296,9 +307,9 @@
         <div class="split fade">
           <ul class="rows">${S.cv.experience.map((e) => `<li><div class="when">${esc(e.when)}</div><div class="what">${esc(e.org)} — ${esc(e.role)}</div></li>`).join("")}</ul>
           <div class="grid-cell"><canvas data-gl="grid" data-cells="10,8" data-amp="0.03"></canvas>${warpSvg(10, 8, 3)}
-            <a class="sticker" href="#/profile" style="left:16%;top:18%;transform:rotate(-8deg)"><img src="${esc(asset(S.avatar))}" alt="birbKit"></a>
-            ${games[0]?.logo ? `<a class="sticker logo" href="#/works/${slug(games[0].title)}" style="left:52%;top:10%;width:110px;transform:rotate(6deg)"><img src="${esc(asset(games[0].logo))}" alt="${esc(games[0].title)}"></a>` : ""}
-            ${games[2]?.logo ? `<a class="sticker logo" href="#/works/${slug(games[2].title)}" style="left:44%;top:52%;width:120px;transform:rotate(-4deg)"><img src="${esc(asset(games[2].logo))}" alt="${esc(games[2].title)}"></a>` : ""}
+            <a class="sticker" href="#/profile" style="left:16%;top:18%;transform:rotate(-8deg)"><img src="${esc(asset(tiny(S.avatar)))}"${fall(S.avatar)} alt="birbKit"></a>
+            ${games[0]?.logo ? `<a class="sticker logo" href="#/works/${slug(games[0].title)}" style="left:52%;top:10%;width:110px;transform:rotate(6deg)"><img src="${esc(asset(tiny(games[0].logo)))}"${fall(games[0].logo)} alt="${esc(games[0].title)}"></a>` : ""}
+            ${games[2]?.logo ? `<a class="sticker logo" href="#/works/${slug(games[2].title)}" style="left:44%;top:52%;width:120px;transform:rotate(-4deg)"><img src="${esc(asset(tiny(games[2].logo)))}"${fall(games[2].logo)} alt="${esc(games[2].title)}"></a>` : ""}
           </div>
         </div>
       </section>
@@ -351,8 +362,8 @@
         <div class="profile">
           <aside class="profile-side fade">
             <div class="win"><div class="win-bar"><span>portrait.jpg</span><span>${esc(S.name)}</span></div>
-              <div class="win-body"><img src="${esc(asset(S.portrait))}" alt="${esc(S.name)}"></div></div>
-            <div class="sticker"><img src="${esc(asset(S.avatar))}" alt="birbKit"></div>
+              <div class="win-body"><img src="${esc(asset(tiny(S.portrait, "m")))}"${fall(S.portrait)} alt="${esc(S.name)}"></div></div>
+            <div class="sticker"><img src="${esc(asset(tiny(S.avatar)))}"${fall(S.avatar)} alt="birbKit"></div>
           </aside>
           <div>
             <div class="block about fade"><div class="label">(About)</div>
@@ -369,7 +380,7 @@
             <div class="block fade"><div class="label">(Education)</div>
               <dl class="kv">${S.cv.education.map((e) => `<dt>${esc(e.place)}</dt><dd><b style="font-weight:500">${esc(e.school)}</b><br><span style="color:var(--muted)">${esc(e.credential)}</span></dd>`).join("")}</dl></div>
             <div class="block fade"><div class="label">(Off the clock — <a href="${esc(net["Personal IG"] || "#")}" target="_blank" rel="noopener">@k2ttan</a>)</div>
-              <div class="strip">${S.offClock.map((src) => `<img src="${esc(asset(src))}" alt="" loading="lazy">`).join("")}</div></div>
+              <div class="strip">${S.offClock.map((src) => `<img src="${esc(asset(tiny(src)))}"${fall(src)} alt="" loading="lazy">`).join("")}</div></div>
           </div>
         </div>
       </section>
@@ -386,7 +397,7 @@
             <div class="poem">${S.poem.map((l) => `<p>${l}</p>`).join("")}</div>
           </div>
           <div class="win fade"><div class="win-bar"><span>birbkit.jpg</span><span>●</span></div>
-            <div class="win-body" style="aspect-ratio:1"><img src="${esc(asset("images/birbkit-1024.jpg"))}" alt="birbKit"></div></div>
+            <div class="win-body" style="aspect-ratio:1"><img src="${esc(asset(tiny("images/birbkit-1024.jpg", "m")))}"${fall("images/birbkit-1024.jpg")} alt="birbKit"></div></div>
         </div>
       </section>
       ${foot()}`,
@@ -415,8 +426,8 @@
       <div class="stream-stick">
         <div class="stream-world">${slots.map((p, i) => {
           const w = list[p], src = w.hero || w.cover;
-          const face = src ? `<img src="${esc(asset(src))}" alt="" decoding="async" draggable="false">` : tile(w);
-          const bg = src ? `background-image:url('${esc(asset(src))}')` : `background:${esc(w.accent || "var(--sky)")}`;
+          const face = src ? `<img src="${esc(asset(tiny(src, "m")))}"${fall(src)} alt="" decoding="async" draggable="false">` : tile(w);
+          const bg = src ? `background-image:url('${esc(asset(tiny(src, "m")))}')` : `background:${esc(w.accent || "var(--sky)")}`;
           return `<a class="s-card" data-p="${p}" href="#/works/${slug(w.title)}" aria-label="${esc(w.title)}"${i >= list.length ? ' tabindex="-1"' : ""}>
             ${Array.from({ length: GHOSTS }, (_, k) => `<i class="s-ghost" style="${bg};--k:${k + 1}"></i>`).join("")}
             <span class="s-face">${face}</span></a>`;
@@ -620,8 +631,8 @@
     modalWin.innerHTML = `
       <div class="win-bar"><span id="modal-title">${esc(w.title)}</span><button class="win-x" type="button" aria-label="Close" data-close>×</button></div>
       <div class="modal-scroll">
-        <div class="stage">${imgs.length ? `<img src="${esc(asset(imgs[0]))}" alt="${esc(w.title)}">` : tile(w)}</div>
-        ${imgs.length > 1 ? `<div class="thumbs">${imgs.map((src, i) => `<button type="button" class="${i ? "" : "on"}" data-src="${esc(asset(src))}" aria-label="Image ${i + 1}"><img src="${esc(asset(src))}" alt="" loading="lazy"></button>`).join("")}</div>` : ""}
+        <div class="stage">${imgs.length ? `<img src="${esc(asset(tiny(imgs[0], "m")))}"${fall(imgs[0])} alt="${esc(w.title)}">` : tile(w)}</div>
+        ${imgs.length > 1 ? `<div class="thumbs">${imgs.map((src, i) => `<button type="button" class="${i ? "" : "on"}" data-src="${esc(asset(tiny(src, "m")))}" aria-label="Image ${i + 1}"><img src="${esc(asset(tiny(src)))}"${fall(src)} alt="" loading="lazy"></button>`).join("")}</div>` : ""}
         <h2 class="m-title">${esc(w.title)}</h2>
         <div class="m-tags">${tags.map((t) => `<span>${esc(t)}</span>`).join("")}</div>
         ${w.summary ? `<p class="m-summary">${esc(w.summary)}</p>` : ""}
@@ -958,18 +969,27 @@
     const stick = sec.querySelector(".vcr-stick");
     const ctl = sec.querySelector("canvas[data-gl]")?._vcr;
     const items = [...sec.querySelectorAll(".vcr-fallback [data-i]")];
+    // the fallback pictures only load when there is no WebGL to draw the screen (hidden images are fetched anyway)
+    if (!ctl) items.forEach((el) => { if (el.dataset.src) el.src = el.dataset.src; });
     const lis = [...sec.querySelectorAll("[data-reel]")];
     const box = sec.querySelector(".vcr-wins");
     const tc = sec.querySelector(".tc"), ch = sec.querySelector(".vcr-ch");
     let t0 = 0, cur = -1, want = 0, live = false;
 
-    if (ctl) reel.forEach((w, i) => {
-      const src = w.hero || w.cover;
-      if (!src) return document.fonts.ready.then(() => ctl.set(i, reelCard(w, stick.clientWidth / stick.clientHeight)));
-      const im = new Image();
-      im.src = asset(src);
-      im.decode().then(() => ctl.set(i, im)).catch(() => {});
-    });
+    // Screen textures load when the section comes near, not on page load — the "NO FEED" beat covers the wait.
+    // The medium tier is plenty: the shader adds scanlines, noise and RGB split over the top.
+    let loaded = false;
+    const loadTextures = () => {
+      if (loaded || !ctl) return;
+      loaded = true;
+      reel.forEach((w, i) => {
+        const src = w.hero || w.cover;
+        if (!src) return document.fonts.ready.then(() => ctl.set(i, reelCard(w, stick.clientWidth / stick.clientHeight)));
+        const im = new Image();
+        im.src = asset(tiny(src, "m"));
+        im.decode().then(() => ctl.set(i, im)).catch(() => { im.src = asset(src); im.decode().then(() => ctl.set(i, im)).catch(() => {}); });
+      });
+    };
 
     const pushWin = (w, i) => {
       const el = document.createElement("div");
@@ -1015,9 +1035,13 @@
       show(want);
       setTimeout(() => stick.classList.remove("feeding"), 1400);
     };
+    const near = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) { loadTextures(); near.disconnect(); } }, { rootMargin: "80% 0px" });
+    near.observe(sec);
+    onCleanup(() => near.disconnect());
     const io = new IntersectionObserver((es) => {
       if (!es.some((e) => e.isIntersecting)) return;
       io.disconnect();
+      loadTextures();
       setTimeout(connect, reduceMotion ? 0 : 750);
     }, { threshold: 0.45 });
     io.observe(stick);

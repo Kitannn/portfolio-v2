@@ -19,6 +19,11 @@ foreach ($j in $jobs) {
 # Single files
 foreach ($f in "data.js", "cv.html") { Copy-Item (Join-Path $src $f) (Join-Path $dst $f) -Force }
 
+# Rebuild the small image tiers the site loads (thumbs/s and thumbs/m). They live outside images/ because the
+# mirror above runs with /MIR and would delete them. Needs Pillow:  python -m pip install pillow
+python (Join-Path $dst "tools\thumbs.py")
+if ($LASTEXITCODE -ne 0) { throw "tools\thumbs.py failed (exit $LASTEXITCODE) - is Pillow installed?" }
+
 $count = (Get-ChildItem (Join-Path $dst "images") -Recurse -File).Count
 $mb = (Get-ChildItem (Join-Path $dst "images"), (Join-Path $dst "assets") -Recurse -File | Measure-Object Length -Sum).Sum / 1MB
 "Synced data.js, cv.html, $count images, resume ({0:N1} MB) from $src" -f $mb
