@@ -549,3 +549,81 @@ body.looking { cursor: none; }
 .cheat-chip:hover i { opacity: 1; }
 .cheat-tip { font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: rgba(238, 234, 245, .28); }
 .cheat-line.all .cheat-head { letter-spacing: .2em; }
+
+/* ---------- touch controls ---------- */
+.touch { position: fixed; inset: 0; z-index: 7; pointer-events: none; touch-action: none; }
+.tc-zone { position: absolute; top: 0; bottom: 0; pointer-events: auto; touch-action: none; }
+.tc-zone-left { left: 0; width: 50%; }
+/* the right side only swallows drags when it is actually the aiming surface */
+.tc-zone-right { right: 0; width: 50%; pointer-events: none; }
+.tc-zone-right.armed { pointer-events: auto; }
+
+/* the stick is drawn wherever the thumb landed */
+.tc-stick { position: absolute; width: 0; height: 0; pointer-events: none; }
+.tc-base, .tc-nub { position: absolute; left: 50%; top: 50%; border-radius: 50%; transform: translate(-50%, -50%); }
+.tc-base { width: 132px; height: 132px; border: 2px solid rgba(124, 198, 255, .3); background: rgba(124, 198, 255, .07); }
+.tc-nub { width: 58px; height: 58px; border: 2px solid var(--sky); background: rgba(124, 198, 255, .22); box-shadow: 0 0 18px rgba(124, 198, 255, .35); }
+
+/* An arc rather than a stack: a landscape phone is ~390px tall, and three stacked buttons plus
+   the HUD simply do not fit. This puts them where a right thumb actually sweeps. */
+.tc-buttons { position: absolute; right: 0; bottom: 0; width: 250px; height: 210px; }
+.tc-btn {
+  pointer-events: auto; touch-action: none; -webkit-tap-highlight-color: transparent;
+  display: grid; place-items: center; border-radius: 50%;
+  font-size: 10px; letter-spacing: .12em; font-weight: 600;
+  border: 2px solid var(--line); background: rgba(14, 13, 20, .7); color: var(--muted);
+  transition: transform .08s, background .12s, color .12s, border-color .12s;
+}
+.tc-btn { position: absolute; }
+.tc-fire { right: 20px; bottom: 20px; width: 100px; height: 100px; font-size: 13px; letter-spacing: .18em; border-color: rgba(255, 77, 94, .45); color: #ff8b97; }
+.tc-boost { right: 124px; bottom: 34px; width: 72px; height: 72px; border-color: rgba(255, 201, 74, .45); color: var(--yolk); }
+.tc-brake { right: 36px; bottom: 126px; width: 60px; height: 60px; font-size: 9px; }
+.tc-btn.on { transform: scale(.93); color: #07070c; }
+.tc-fire.on { background: var(--danger); border-color: var(--danger); }
+.tc-boost.on { background: var(--yolk); border-color: var(--yolk); }
+.tc-brake.on { background: var(--fg); border-color: var(--fg); }
+
+.tc-hint {
+  position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%);
+  font-size: 9px; letter-spacing: .14em; white-space: nowrap;
+  text-transform: uppercase; color: rgba(238, 234, 245, .35);
+}
+
+/* On a touchscreen the bottom right belongs to the thumb, so everything the HUD keeps there moves
+   up to the top bar beside the pause button. The keyboard legend goes entirely. */
+body.is-touch .hud-hint { display: none; }
+body.is-touch .cam-toggle em { display: none; }
+body.is-touch .cam-toggle { right: 62px; top: 12px; bottom: auto; padding: 6px 10px; }
+body.is-touch .hud-ammo { right: 178px; top: 6px; bottom: auto; width: 56px; height: 56px; }
+body.is-touch .ammo-num b { font-size: 16px; }
+body.is-touch .ammo-num i { display: none; }
+body.is-touch .ammo-word { bottom: -13px; font-size: 8px; }
+/* the stick lands in the lower left, so the bars tuck up out of its way */
+body.is-touch .hud-bars { bottom: auto; top: 108px; width: min(190px, 34vw); gap: 4px; }
+
+/* portrait cannot fit a stick and a button cluster without one sitting on the other */
+.tc-rotate {
+  position: fixed; inset: 0; z-index: 40; display: grid; place-items: center;
+  background: #07070c; text-align: center;
+}
+.tc-rotate p { margin-top: 18px; font-size: 12px; letter-spacing: .22em; text-transform: uppercase; color: var(--muted); }
+.tc-phone {
+  display: block; width: 58px; height: 96px; margin: 0 auto; border: 3px solid var(--sky); border-radius: 9px;
+  animation: tcTurn 2.4s ease-in-out infinite;
+}
+@keyframes tcTurn {
+  0%, 30% { transform: rotate(0deg); }
+  60%, 100% { transform: rotate(-90deg); }
+}
+
+@media (max-height: 430px) {
+  .tc-buttons { width: 210px; height: 175px; }
+  .tc-fire { right: 16px; bottom: 14px; width: 86px; height: 86px; font-size: 11px; }
+  .tc-boost { right: 106px; bottom: 26px; width: 62px; height: 62px; }
+  .tc-brake { right: 28px; bottom: 106px; width: 52px; height: 52px; }
+  .tc-base { width: 112px; height: 112px; }
+  .tc-nub { width: 48px; height: 48px; }
+  body.is-touch .hud-bars { top: 100px; }
+  body.is-touch .hud-tl { gap: 1px; }
+  body.is-touch .hud-time { font-size: 15px; }
+}

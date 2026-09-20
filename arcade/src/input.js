@@ -14,6 +14,7 @@ export const input = {
   lookDelta: 0,             // yaw requested since the last frame, in radians, consumed by the camera
   lookDeltaY: 0,            // …and pitch
   pointerLocked: false,
+  touch: false,             // true once touch controls have taken over
   paused: false,
 };
 
@@ -39,6 +40,7 @@ export function attachInput(canvas, { onPause, onReload, onFreeLook, onLockLost 
   let releasingOnPurpose = false;
 
   const capture = () => {
+    if (input.touch) return;                 // nothing to capture on a touchscreen
     if (document.pointerLockElement === canvas) return;
     try { canvas.requestPointerLock?.()?.catch?.(() => {}); } catch { /* look on without it */ }
   };
@@ -126,15 +128,19 @@ export function attachInput(canvas, { onPause, onReload, onFreeLook, onLockLost 
     input.aimActive = true;
   };
 
-  addEventListener("pointermove", setAim);
+  // Once the touch layer is live it owns every finger — otherwise a thumb on the joystick would
+  // also read as "aim here and pull the trigger" through these same pointer events.
+  const mouseOnly = (e) => !(input.touch && e.pointerType === "touch");
+
+  addEventListener("pointermove", (e) => { if (mouseOnly(e)) setAim(e); });
   canvas.addEventListener("pointerdown", (e) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || !mouseOnly(e)) return;
     // clicking back into the canvas re-captures the pointer if mouse-look is still on
     if (input.freeLook) capture();
     setAim(e);
     input.firing = true;
   });
-  addEventListener("pointerup", (e) => { if (e.button === 0) input.firing = false; });
+  addEventListener("pointerup", (e) => { if (e.button === 0 && mouseOnly(e)) input.firing = false; });
   canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
   return {

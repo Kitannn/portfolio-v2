@@ -4,6 +4,7 @@ import * as THREE from "three";
 import { buildWorld } from "./world.js";
 import { createPlayer, createChaseCam } from "./player.js";
 import { attachInput, input } from "./input.js";
+import { createTouch, looksLikeTouch } from "./touch.js";
 import { createWeapon } from "./weapon.js";
 import { createHud } from "./hud.js";
 import { createFx } from "./fx.js";
@@ -106,7 +107,7 @@ const world = buildWorld(scene);
 const player = createPlayer(scene, getStats);
 const weapon = createWeapon(scene, player.car, getStats);
 const hud = createHud($("hud"), {
-  onFreeLook: () => input.setFreeLook?.(!input.freeLook),
+  onFreeLook: () => { input.setFreeLook?.(!input.freeLook); touch.syncMode(); },
   onPause: () => togglePause(),
 });
 const chase = createChaseCam(camera);
@@ -252,9 +253,26 @@ let state = STATE.BOOT;
 let unfreezeIn = 0;     // the half-second the world stays still after a card is taken
 let dyingIn = 0;        // wreck animation before the finish screen
 
+const touch = createTouch($("touchHost"), input);
+
+// Touch takes over the moment a finger lands, even on a laptop that also has a mouse — the
+// coarse-pointer check alone misses hybrids, and getting it wrong means a tap fires the gun with
+// no way to steer.
+function enableTouch() {
+  if (input.touch) return;
+  input.touch = true;
+  input.releaseMouse?.(true);
+  document.body.classList.add("is-touch");
+  touch.show(state === STATE.PLAYING);
+}
+addEventListener("touchstart", enableTouch, { passive: true, once: true });
+if (looksLikeTouch()) enableTouch();
+
 attachInput(canvas, {
   onPause: () => togglePause(),
   onLockLost: () => { if (state === STATE.PLAYING) togglePause(); },
+  // the L CTRL keybind has to reach the touch layer too, so FIRE swaps for drag-to-aim
+  onFreeLook: () => touch.syncMode(),
   onReload: () => { if (state === STATE.PLAYING) weapon.startReload(); },
 });
 
@@ -370,10 +388,12 @@ function togglePause() {
     input.firing = false;
     // hand the cursor back so the menu is clickable, but stay IN mouse-look
     input.releaseMouse?.(true);
+    touch.show(false);
     pause.show(run);
   } else if (state === STATE.PAUSED) {
     pause.close();
     state = STATE.PLAYING;
+    touch.show(input.touch);
     if (input.freeLook) input.captureMouse?.();       // resuming takes the cursor again
   }
 }
@@ -409,6 +429,7 @@ function endRun(won) {
   result.credits = Math.round((creditsFor(result) + run.chestCredits) * (run.stats.creditMult || 1));
   store.recordRun(result);
   hud.show(false);
+  touch.show(false);
   levelUp.close();
   finish.show(result);
   state = STATE.FINISH;
@@ -458,6 +479,7 @@ function startRun() {
   weakNote = ""; weakNoteIn = 0;
   chase.snap(player);
   hud.show(true);
+  touch.show(input.touch);
   state = STATE.PLAYING;
 }
 
@@ -626,4 +648,4 @@ function wreckPlayer() {
 }
 
 // handy while building
-window.GAME = { scene, camera, renderer, player, weapon, hud, fx, foes, boss, subs, scatter, chase, run, input, levelUp, finish, menus, store, endRun, BOSS_AT, get state() { return state; } };
+window.GAME = { scene, camera, renderer, player, weapon, hud, fx, foes, boss, subs, scatter, chase, run, input, touch, levelUp, finish, menus, store, endRun, BOSS_AT, get state() { return state; } };
