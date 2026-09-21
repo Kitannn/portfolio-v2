@@ -1,4 +1,4 @@
-/* H[K]IT AND RUN — hidden arcade page.
+/* HKIT AND RUN — hidden arcade page.
    Its own stylesheet: the site's style.css is never loaded here, so nothing bleeds either way.
    Palette borrows the portfolio's birbKit accents and pushes them into neon. */
 :root {
@@ -52,12 +52,10 @@ a { color: inherit; text-decoration: none; }
 .boot-note { margin-top: 12px; font-size: 11px; letter-spacing: .3em; text-transform: uppercase; color: var(--muted); }
 
 /* ---------- title + menu ---------- */
-#title { background: radial-gradient(120% 90% at 50% 45%, rgba(7, 7, 12, .3), rgba(7, 7, 12, .92)); }
+#title { background: radial-gradient(120% 90% at 50% 45%, rgba(7, 7, 12, .58), rgba(7, 7, 12, .95)); }
 .title-wrap { display: grid; justify-items: center; gap: 30px; text-align: center; padding: 24px; }
 .game-logo { font-family: "Silkscreen", monospace; font-weight: 400; line-height: 1; display: grid; gap: 6px; }
 .game-logo span { font-size: clamp(22px, 5.2vw, 46px); letter-spacing: .12em; color: var(--fg); }
-/* the bracketed K — kit, wearing hit-and-run as a disguise */
-.game-logo i { font-style: normal; color: rgba(238, 234, 245, .38); }
 .game-logo em {
   font-style: normal; font-size: clamp(40px, 11vw, 104px); letter-spacing: .06em; font-weight: 700;
   color: var(--sky); text-shadow: 0 0 22px rgba(124, 198, 255, .55), 0 0 60px rgba(124, 198, 255, .25);
@@ -65,7 +63,8 @@ a { color: inherit; text-decoration: none; }
 
 .big-btn {
   padding: 14px 52px; font-family: "Silkscreen", monospace; font-size: 20px; letter-spacing: .18em;
-  border: 2px solid var(--fg); color: var(--fg); background: rgba(238, 234, 245, .04);
+  border: 2px solid var(--fg); color: var(--fg); background: rgba(9, 9, 15, .62);
+  backdrop-filter: blur(3px);
   transition: background .18s, color .18s, transform .18s, box-shadow .18s;
 }
 .big-btn:hover, .big-btn:focus-visible { background: var(--fg); color: #07070c; transform: translateY(-2px); box-shadow: 0 10px 30px rgba(238, 234, 245, .2); outline: 0; }
@@ -73,16 +72,23 @@ a { color: inherit; text-decoration: none; }
 .menu { display: grid; gap: 10px; justify-items: center; min-width: 260px; }
 .menu-btn {
   width: 100%; padding: 11px 26px; font-size: 13px; letter-spacing: .22em; text-transform: uppercase;
-  border: 1px solid var(--line); background: rgba(238, 234, 245, .03); color: var(--muted);
+  border: 1px solid rgba(238, 234, 245, .3); background: rgba(9, 9, 15, .66); color: rgba(238, 234, 245, .88);
+  backdrop-filter: blur(3px);
   transition: color .16s, border-color .16s, background .16s, letter-spacing .16s;
 }
 .menu-btn:hover, .menu-btn:focus-visible { color: var(--fg); border-color: var(--sky); background: rgba(124, 198, 255, .08); letter-spacing: .3em; outline: 0; }
-.menu-btn[data-menu="play"] { color: var(--fg); border-color: rgba(124, 198, 255, .5); }
+.menu-btn[data-menu="play"] { color: var(--fg); border-color: rgba(124, 198, 255, .75); background: rgba(124, 198, 255, .14); }
 
-.credits-line { font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); }
+.credits-line {
+  font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: rgba(238, 234, 245, .8);
+  padding: 5px 12px; background: rgba(9, 9, 15, .6); backdrop-filter: blur(3px);
+}
 .credits-line b { color: var(--yolk); }
 
-.back-site { position: fixed; left: 18px; bottom: 16px; font-size: 11px; letter-spacing: .14em; color: var(--muted); transition: color .16s; }
+.back-site {
+  position: fixed; left: 18px; bottom: 16px; font-size: 11px; letter-spacing: .14em;
+  padding: 5px 10px; color: rgba(238, 234, 245, .72); background: rgba(9, 9, 15, .6); transition: color .16s;
+}
 .back-site:hover { color: var(--fg); }
 
 /* fade helper used when swapping between title, menu and modals */
@@ -494,7 +500,8 @@ body.looking { cursor: none; }
 /* ---------- cheat codes carried over from the portfolio ---------- */
 .cheat-line {
   max-width: min(520px, 88vw); font-size: 10px; line-height: 1.6; letter-spacing: .12em;
-  text-transform: uppercase; color: var(--muted); text-align: center;
+  text-transform: uppercase; color: rgba(238, 234, 245, .78); text-align: center;
+  padding: 8px 14px; background: rgba(9, 9, 15, .6); backdrop-filter: blur(3px);
 }
 .cheat-line b { color: var(--sky); }
 .cheat-line span { display: block; margin-top: 3px; font-size: 9px; letter-spacing: .06em; text-transform: none; color: rgba(238, 234, 245, .4); }
@@ -533,6 +540,8 @@ body.looking { cursor: none; }
 
 /* a run that leaned on codes is flagged, so it never sits next to a clean one unmarked */
 .lb-cheat { margin-left: 8px; padding: 1px 5px; font-style: normal; font-size: 8px; letter-spacing: .14em; color: #07070c; background: var(--yolk); }
+/* and an edited save is a different thing again, so it gets a different colour */
+.lb-cheat.is-hack { background: var(--danger); color: #fff; }
 
 /* active cheat codes on the title screen, each one a switch you can flip off */
 .cheat-line { display: grid; gap: 6px; justify-items: center; }
@@ -541,13 +550,13 @@ body.looking { cursor: none; }
 .cheat-chip {
   display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px;
   font-size: 9px; letter-spacing: .04em; text-transform: none; pointer-events: auto;
-  color: rgba(238, 234, 245, .55); border: 1px solid var(--line); background: rgba(238, 234, 245, .03);
+  color: rgba(238, 234, 245, .8); border: 1px solid rgba(238, 234, 245, .28); background: rgba(238, 234, 245, .07);
   transition: color .15s, border-color .15s, background .15s;
 }
 .cheat-chip i { font-style: normal; font-size: 11px; opacity: .45; }
 .cheat-chip:hover, .cheat-chip:focus-visible { color: var(--danger); border-color: rgba(255, 77, 94, .5); background: rgba(255, 77, 94, .08); outline: 0; }
 .cheat-chip:hover i { opacity: 1; }
-.cheat-tip { font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: rgba(238, 234, 245, .28); }
+.cheat-tip { font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: rgba(238, 234, 245, .45); }
 .cheat-line.all .cheat-head { letter-spacing: .2em; }
 
 /* ---------- touch controls ---------- */
@@ -600,6 +609,9 @@ body.is-touch .ammo-num i { display: none; }
 body.is-touch .ammo-word { bottom: -13px; font-size: 8px; }
 /* the stick lands in the lower left, so the bars tuck up out of its way */
 body.is-touch .hud-bars { bottom: auto; top: 108px; width: min(190px, 34vw); gap: 4px; }
+/* The top bar is crowded once the ammo ring, the camera toggle and pause all move up there, and a
+   centred boss bar runs straight under the ring. Span the gap that is actually left instead. */
+body.is-touch .hud-boss { left: 128px; right: 246px; width: auto; transform: none; }
 
 /* portrait cannot fit a stick and a button cluster without one sitting on the other */
 .tc-rotate {
@@ -627,3 +639,100 @@ body.is-touch .hud-bars { bottom: auto; top: 108px; width: min(190px, 34vw); gap
   body.is-touch .hud-tl { gap: 1px; }
   body.is-touch .hud-time { font-size: 15px; }
 }
+
+
+/* ---------- pickup toast ---------- */
+/* A reward is announced in the middle of the screen, where the driver is already looking. It sits
+   above centre so it never covers the crosshair or whatever is about to be shot. */
+.hud-toast {
+  position: absolute; left: 50%; top: 31%; transform: translate(-50%, -50%);
+  display: grid; justify-items: center; gap: 4px; text-align: center; white-space: nowrap;
+  animation: toastIn .5s cubic-bezier(.16, 1.2, .3, 1) both;
+}
+.hud-toast b {
+  font-family: "Silkscreen", monospace; font-weight: 400; font-size: 13px; letter-spacing: .42em;
+  text-indent: .42em; color: rgba(238, 234, 245, .62);
+}
+.hud-toast span {
+  font-family: "Silkscreen", monospace; font-size: clamp(26px, 5.4vw, 46px); letter-spacing: .07em;
+  color: var(--fg); text-shadow: 0 0 26px rgba(0, 0, 0, .9), 0 4px 18px rgba(0, 0, 0, .8);
+}
+.hud-toast.gold span { color: var(--yolk); text-shadow: 0 0 30px rgba(255, 201, 74, .6), 0 3px 16px rgba(0, 0, 0, .8); }
+.hud-toast.gold b { color: rgba(255, 201, 74, .7); }
+.hud-toast.epic span { color: var(--r-epic); text-shadow: 0 0 30px rgba(192, 123, 255, .6), 0 3px 16px rgba(0, 0, 0, .8); }
+.hud-toast.epic b { color: rgba(192, 123, 255, .75); }
+@keyframes toastIn {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.72); }
+  55% { opacity: 1; transform: translate(-50%, -50%) scale(1.06); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@media (max-height: 430px) { .hud-toast { top: 27%; } .hud-toast span { font-size: 28px; } }
+
+/* ---------- a legendary or mythic pull announces itself ---------- */
+/* Three layers, all decorative and all pointer-transparent: a shockwave that snaps outward once,
+   a ring of rays behind the card, and a few sparks that keep twinkling while the choice is open. */
+.card-rare-pop { overflow: visible; }
+.card-rare-pop::before {
+  content: ""; position: absolute; inset: -2px; pointer-events: none; z-index: 2;
+  border: 2px solid var(--r);
+  animation: rarEdge 1.5s ease-in-out infinite;
+}
+.card-rare-pop {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--r) 45%, transparent), 0 14px 44px -14px var(--r);
+}
+.pop-burst, .pop-rays, .pop-sparks { position: absolute; left: 50%; top: 42%; pointer-events: none; }
+.pop-burst i {
+  position: absolute; left: 0; top: 0; width: 24px; height: 24px; margin: -12px 0 0 -12px;
+  border: 3px solid var(--r); border-radius: 50%;
+  animation: rarWave .72s cubic-bezier(.1, .8, .3, 1) both;
+}
+.pop-burst i:nth-child(2) { animation-delay: .13s; border-width: 2px; }
+@keyframes rarWave {
+  0% { opacity: 0; transform: scale(.2); }
+  16% { opacity: .78; }
+  100% { opacity: 0; transform: scale(12); }
+}
+.pop-rays i {
+  position: absolute; left: 0; top: 0; width: 5px; height: 170px; margin-left: -2.5px;
+  transform-origin: 50% 0; rotate: var(--a);
+  background: linear-gradient(var(--r), transparent 72%);
+  animation: rarRay .6s ease-out var(--d) both;
+}
+@keyframes rarRay {
+  0% { opacity: 0; scale: 1 .1; }
+  40% { opacity: .8; }
+  100% { opacity: 0; scale: 1 1; }
+}
+.pop-sparks { left: 0; top: 0; right: 0; bottom: 0; }
+.pop-sparks i {
+  position: absolute; left: var(--x); top: var(--y); width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px;
+  background: var(--r); clip-path: polygon(50% 0, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0 50%, 40% 40%);
+  animation: rarSpark 1.9s ease-in-out var(--d) infinite;
+}
+@keyframes rarSpark {
+  0%, 100% { opacity: 0; transform: scale(.4) rotate(0deg); }
+  50% { opacity: 1; transform: scale(1.7) rotate(90deg); }
+}
+@keyframes rarEdge {
+  0%, 100% { opacity: .35; box-shadow: inset 0 0 18px -6px var(--r); }
+  50% { opacity: .9; box-shadow: inset 0 0 26px -4px var(--r); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pop-burst, .pop-rays, .pop-sparks { display: none; }
+  .card-rare-pop::before { animation: none; opacity: .6; }
+  .hud-toast { animation: none; }
+}
+
+/* ---------- the tag trails the name instead of being explained ---------- */
+/* A transparent copy of what has been typed, with the tag printed after it, laid exactly over the
+   real input so the tag always sits where the caret leaves off. */
+.name-ghost {
+  position: absolute; inset: 0; display: block; pointer-events: none; overflow: hidden;
+  padding: 14px 64px 14px 16px; font: inherit; font-size: 16px; letter-spacing: .06em;
+  /* the surrounding block is centred; the field is not, and the tag has to sit on the real text */
+  text-align: left; white-space: pre; color: transparent;
+}
+/* nothing typed yet, so there is nothing for the tag to trail — it would land on the placeholder */
+.name-field:has(input:placeholder-shown) .name-ghost b { opacity: 0; }
+.name-ghost i { font-style: normal; color: transparent; }
+.name-ghost b { font-weight: 400; color: rgba(124, 198, 255, .6); }

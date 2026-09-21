@@ -908,8 +908,10 @@ body.nav-peek .socials .pill, .f-tuckNav .socials:focus-within .pill { transform
   text-decoration: none; -webkit-tap-highlight-color: transparent;
 }
 /* The well clips the cart, so it can only ever be part way out — it rises far enough to read as
-   a cartridge and drops back, rather than travelling clear of the slot and floating above it. */
-.pak-well { position: relative; width: 78px; height: 40px; overflow: hidden; }
+   a cartridge and drops back, rather than travelling clear of the slot and floating above it.
+   It has to be tall enough for the cart to have somewhere to go: at 40px the seated position put
+   the whole cart behind the slot lip, which left a barely visible dark line in the corner. */
+.pak-well { position: relative; width: 78px; height: 54px; overflow: hidden; }
 .pak-slot {
   position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; height: 16px; border-radius: 3px;
   background: linear-gradient(#0a090e, #17151d);
@@ -921,11 +923,19 @@ body.nav-peek .socials .pill, .f-tuckNav .socials:focus-within .pill { transform
 }
 .pak-cart {
   position: absolute; left: 50%; bottom: 3px; z-index: 1;
-  width: 58px; height: 34px; margin-left: -29px;
+  width: 58px; height: 36px; margin-left: -29px;
   border-radius: 3px 3px 1px 1px; background: linear-gradient(#5b616d, #3f434d);
   box-shadow: 0 5px 12px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 255, 255, .22);
-  transform: translateY(21px);                       /* seated: only the lip shows above the slot */
+  /* Seated, but seated PROUD: two thirds of the cart stands above the slot so the corner always
+     reads as a cartridge waiting to be pushed in, not as an empty socket. */
+  transform: translateY(9px);
   transition: transform .4s cubic-bezier(.25, 1.4, .4, 1);
+  animation: pakIdle 4.5s ease-in-out 1.2s infinite;
+}
+/* a slow breath on the spot, so the corner has some life without asking for attention */
+@keyframes pakIdle {
+  0%, 84%, 100% { transform: translateY(9px); }
+  90% { transform: translateY(6px); }
 }
 .pak-lip { position: absolute; left: 4px; right: 4px; top: 3px; height: 4px; border-radius: 1px; background: repeating-linear-gradient(90deg, rgba(0, 0, 0, .42) 0 2px, transparent 2px 5px); }
 .pak-label { position: absolute; left: 6px; right: 6px; top: 10px; height: 17px; border-radius: 1px; background: linear-gradient(#e7e9ee, #c5c9d3); box-shadow: inset 0 0 0 .5px rgba(0, 0, 0, .4); }
@@ -933,34 +943,62 @@ body.nav-peek .socials .pill, .f-tuckNav .socials:focus-within .pill { transform
 .pak-label::after { content: ""; position: absolute; left: 4px; right: 4px; top: 8px; height: 5px; background: repeating-linear-gradient(90deg, rgba(22, 20, 28, .45) 0 3px, transparent 3px 6px); }
 .pak-grip { position: absolute; left: 10px; right: 10px; bottom: 2px; height: 3px; border-radius: 1px; background: rgba(0, 0, 0, .35); }
 
+/* Always legible, just quieter until it is pointed at — the corner has to say what it is without
+   being hovered, because on a phone there is no hover to do the saying. */
 .pak-name {
   font-size: 10px; font-weight: 600; letter-spacing: .26em; text-transform: uppercase;
-  color: var(--sky); opacity: 0; transform: translateY(-3px);
-  transition: opacity .25s, transform .25s;
+  color: var(--sky); opacity: .62;
+  transition: opacity .25s, text-shadow .25s;
 }
 
-/* hover / focus: the cart pops out, rocks once, and the label appears */
+/* a faint pool of light under the corner, so the whole thing separates from the hero behind it */
+.pak::before {
+  content: ""; position: absolute; left: 50%; top: 42%; width: 130px; height: 130px;
+  margin: -65px 0 0 -65px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, rgba(124, 198, 255, .13), transparent 68%);
+  opacity: .55; transition: opacity .3s;
+}
+.pak:hover::before, .pak:focus-visible::before { opacity: 1; }
+
+/* hover / focus: the cart ejects, rocks once, and the label comes up to full */
 .pak:hover .pak-cart, .pak:focus-visible .pak-cart { animation: pakEject .75s cubic-bezier(.25, 1.3, .4, 1) forwards; }
-.pak:hover .pak-name, .pak:focus-visible .pak-name { opacity: 1; transform: translateY(0); }
+.pak:hover .pak-name, .pak:focus-visible .pak-name { opacity: 1; text-shadow: 0 0 14px rgba(124, 198, 255, .7); }
 .pak:focus-visible { outline: 2px solid var(--sky); outline-offset: 6px; border-radius: 4px; }
-/* out, a small settle, and it stays part way proud — never all the way through */
+/* out, a small settle, and back to proud — it never leaves the slot entirely */
 @keyframes pakEject {
-  0%   { transform: translateY(21px); }
-  50%  { transform: translateY(2px); }
-  72%  { transform: translateY(9px); }
-  100% { transform: translateY(5px); }
+  0%   { transform: translateY(9px); }
+  46%  { transform: translateY(-14px); }
+  70%  { transform: translateY(-4px); }
+  100% { transform: translateY(-9px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pak-cart { transition: none; }
-  .pak:hover .pak-cart, .pak:focus-visible .pak-cart { animation: none; transform: translateY(5px); }
+  .pak-cart { transition: none; animation: none; }
+  .pak:hover .pak-cart, .pak:focus-visible .pak-cart { animation: none; transform: translateY(-9px); }
 }
 @media (max-width: 900px) {
   .pak { bottom: 40px; width: 74px; }
-  .pak-well { width: 64px; height: 36px; }
-  .pak-cart { width: 48px; margin-left: -24px; height: 30px; }
+  .pak-well { width: 64px; height: 48px; }
+  .pak-cart { width: 48px; margin-left: -24px; height: 32px; }
   .pak-label { top: 9px; height: 14px; }
+  .pak::before { width: 104px; height: 104px; margin: -52px 0 0 -52px; }
+}
+/* No hover to lean on, so the cart simply sits further out and the name stays lit */
+@media (hover: none) {
+  .pak-cart { transform: translateY(2px); }
+  .pak-name { opacity: .85; }
+  @keyframes pakIdle {
+    0%, 84%, 100% { transform: translateY(2px); }
+    90% { transform: translateY(-1px); }
+  }
 }
 
 /* dropped in when leaving for the arcade, so the zoom-in reveals black, not the old page */
 .leave-cover { position: fixed; inset: 0; z-index: 998; background: #08070c; }
+
+/* the hero hint describes the input you actually have */
+.hint-touch { display: none; }
+@media (hover: none) {
+  .hint-fine { display: none; }
+  .hint-touch { display: inline; }
+}

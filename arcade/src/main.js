@@ -1,7 +1,8 @@
-// H[K]IT AND RUN — boot, menu flow and the main loop.
+// HKIT AND RUN — boot, menu flow and the main loop.
 // Hidden page: nothing on kitannn.com links here.
 import * as THREE from "three";
 import { buildWorld } from "./world.js";
+import { buildRoute } from "./route.js";
 import { createPlayer, createChaseCam } from "./player.js";
 import { attachInput, input } from "./input.js";
 import { createTouch, looksLikeTouch } from "./touch.js";
@@ -104,6 +105,7 @@ const run = {
 const getStats = () => run.stats;
 
 const world = buildWorld(scene);
+const route = buildRoute(scene);
 const player = createPlayer(scene, getStats);
 const weapon = createWeapon(scene, player.car, getStats);
 const hud = createHud($("hud"), {
@@ -124,14 +126,14 @@ const foes = createEnemies(scene, fx, {
 const scatter = createScatter(scene, fx, {
   onCreditChest: (value) => {
     run.chestCredits += value;
-    note(`Chest — ◆${value} credits`, 3);
+    hud.toast("CHEST", `◆ ${value} CREDITS`, 2.6, "gold");
     chase.shake(0.25);
   },
   onCardChest: () => {
     // an elite's chest is a free pick, weighted toward the good end
     run.pendingCards++;
     run.luckyCards++;
-    note("Chest — free upgrade", 3);
+    hud.toast("CHEST", "FREE UPGRADE", 2.6, "epic");
   },
 });
 
@@ -203,6 +205,7 @@ const aimPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -1.1);
 const aimPoint = new THREE.Vector3(0, 1.1, 10);
 const ndc = new THREE.Vector2();
 
+let skyAim = false;        // true once the camera has tilted above the horizon
 const reticle = new THREE.Mesh(
   new THREE.RingGeometry(0.42, 0.52, 28),
   new THREE.MeshBasicMaterial({ color: 0x7cc6ff, transparent: true, opacity: 0.85, depthWrite: false })
@@ -226,8 +229,11 @@ function updateAim() {
     player.aimGun(aimPoint);
     reticle.position.set(aimPoint.x, 0.06, aimPoint.z);
     reticleDot.position.set(aimPoint.x, 0.06, aimPoint.z);
+    // above the horizon the aim leaves the ground entirely, so a ground ring would be a lie
+    skyAim = chase.pitch < 0.02;
     return;
   }
+  skyAim = false;
   if (!input.aimActive) {
     // before the pointer moves, aim straight ahead
     aimPoint.set(player.pos.x + Math.sin(player.yaw) * 22, 1.1, player.pos.z + Math.cos(player.yaw) * 22);
@@ -416,7 +422,7 @@ function endRun(won) {
     won,
     name: displayName(store.save()),
     // a run that leaned on codes is marked, so the board never compares it with a clean one
-    cheats: cheats.active().length + (run.invulnerable ? 1 : 0),
+    codes: cheats.active().length + (run.invulnerable ? 1 : 0),
     elapsed: run.elapsed,
     kills: run.kills,
     level: run.level,
@@ -427,6 +433,17 @@ function endRun(won) {
     credits: 0,
   };
   result.credits = Math.round((creditsFor(result) + run.chestCredits) * (run.stats.creditMult || 1));
+  // A last look at the numbers before they are banked. These bounds are far outside anything the
+  // game can produce — they are here to catch a value that was written from outside it, not to
+  // second-guess a good run.
+  if (
+    result.elapsed < 0 || result.kills < 0 ||
+    result.kills > result.elapsed * 12 + 60 ||
+    result.level > 10 + result.elapsed / 2.5 ||
+    result.accuracy > 1.001 ||
+    result.damage > (result.fired + 40) * 400
+  ) store.flagTamper("run values out of range");
+  result.hacked = store.isTampered();
   store.recordRun(result);
   hud.show(false);
   touch.show(false);
@@ -439,7 +456,12 @@ function endRun(won) {
 function play() {
   if (store.save().name) return startRun();
   titleScreen.hidden = true;
-  askName($("modalHost"), () => { refreshCredits(); startRun(); });
+  askName($("modalHost"), (picked) => {
+    refreshCredits();
+    // backing out of the prompt is not "start anyway" — it goes back where it came from
+    titleScreen.hidden = false;
+    if (picked) startRun();
+  });
 }
 
 function startRun() {
@@ -509,7 +531,9 @@ export function takeCard(card) {
   if (st.shieldFullOnLevel) player.shield = Math.max(player.shield, player.maxShield);
   weapon.mag = Math.min(weapon.mag, st.magazine);
 }
-window.__takeCard = takeCard;
+// Left open on purpose while this is being built, but anything that reaches in through it is by
+// definition not playing the game, so the save says so from then on.
+window.__takeCard = (card) => { store.flagTamper("__takeCard"); takeCard(card); };
 
 // ---- loop --------------------------------------------------------------------
 let last = performance.now();
@@ -537,6 +561,7 @@ function frame(now) {
     // the world keeps moving through the wreck, it just no longer takes input
     boss.update(dt, player, run.stats, camera);
     foes.update(dt, run.elapsed, player, run.stats, camera);
+    fx.trails(dt, player, false);
     fx.update(dt, player, 0, () => {});
     chase.update(dt, player);
     if (dyingIn <= 0) endRun(false);
@@ -556,10 +581,11 @@ function frame(now) {
     scatter.update(dt, player);
     if (!boss.active && !boss.dying && run.elapsed >= BOSS_AT) boss.spawn(player);
     weapon.update(dt, { firing: input.firing, aimPoint, boosting: player.boosting, targets });
+    fx.trails(dt, player, input.handbrake);
     fx.update(dt, player, run.stats.pickupRadius, gainXp);
     chase.update(dt, player, input.freeLook, input.lookDelta, input.lookDeltaY);
     input.lookDelta = input.lookDeltaY = 0;
-    reticle.visible = reticleDot.visible = true;
+    reticle.visible = reticleDot.visible = !skyAim;
     if (player.dead) wreckPlayer();
 
     hud.update(dt, {
@@ -590,6 +616,7 @@ function frame(now) {
   }
 
   world.update(dt, elapsed, camera, player.pos);
+  route.update(dt, elapsed, camera);
   renderer.render(scene, camera);
 }
 
@@ -647,5 +674,11 @@ function wreckPlayer() {
   input.firing = false;
 }
 
-// handy while building
-window.GAME = { scene, camera, renderer, player, weapon, hud, fx, foes, boss, subs, scatter, chase, run, input, touch, levelUp, finish, menus, store, endRun, BOSS_AT, get state() { return state; } };
+// Handy while building. Reading it is harmless; the pieces it hands out are the live objects, so
+// touching one is the console route into the run — taking the reference at all is what gets
+// flagged, since there is no way to tell a read from a write once it has been handed over.
+const DEBUG = { scene, camera, renderer, player, weapon, hud, fx, foes, boss, subs, scatter, chase, run, input, touch, levelUp, finish, menus, store, BOSS_AT, get state() { return state; } };
+Object.defineProperty(window, "GAME", {
+  configurable: true,
+  get() { store.flagTamper("window.GAME"); return DEBUG; },
+});

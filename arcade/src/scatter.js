@@ -13,16 +13,15 @@ const CHESTS = 18;
 const CREDIT_CHEST_CHANCE = 0.055;   // share of flora slots that are a chest instead
 const REGROW = 26;                   // seconds before a cleared patch comes back
 
-// The work this world is built out of. Shown on banners and stencilled into the ground.
-const SIGNS = [
+// Ground stencils only. The work history itself now lives along the route (see route.js) — these
+// are the offcuts, sprayed on the tarmac between the districts the way a real site gets marked up.
+const MARKS = [
   { text: "PLUMBROOK", sub: "EA MAXIS" },
   { text: "TOWN STORIES", sub: "THE SIMS" },
-  { text: "GHOST FOX", sub: "GAMES" },
-  { text: "FIFA MOBILE", sub: "EA SPORTS" },
   { text: "COSMIC CARNAGE", sub: "ROBLOX" },
   { text: "BIRBKIT", sub: "KITANNN" },
-  { text: "KEYWORDS", sub: "STUDIOS" },
   { text: "SECTOR 86", sub: "GR" },
+  { text: "CRATER CRASHERS", sub: "GHOST FOX" },
 ];
 
 // ---- a sign, drawn to a canvas and used as a texture -----------------------------
@@ -198,39 +197,20 @@ export function createScatter(scene, fx, hooks = {}) {
   // ---- signage ---------------------------------------------------------------------
   const signs = new THREE.Group();
   scene.add(signs);
-  SIGNS.forEach((s, i) => {
-    const a = (i / SIGNS.length) * TAU + 0.4;
-    const r = ARENA * rand(0.62, 0.9);
-
-    // a tall banner on a mast, angled to face roughly inward
-    const banner = new THREE.Mesh(
-      new THREE.PlaneGeometry(4.4, 17),
-      new THREE.MeshBasicMaterial({ map: signTexture(s.text, s.sub, { vertical: true }), side: THREE.DoubleSide, toneMapped: false })
-    );
-    banner.position.set(Math.cos(a) * r, 11, Math.sin(a) * r);
-    banner.lookAt(0, 11, 0);
-    signs.add(banner);
-
-    const mast = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.34, 0.46, 22, 6),
-      new THREE.MeshStandardMaterial({ color: 0x14161f, roughness: 0.8, metalness: 0.5, flatShading: true })
-    );
-    mast.position.set(Math.cos(a) * r, 11, Math.sin(a) * r);
-    signs.add(mast);
-
-    // and the same name stencilled flat on the ground, where you actually drive
+  MARKS.forEach((s, i) => {
+    const a = (i / MARKS.length) * TAU + 0.4;
     const decal = new THREE.Mesh(
       new THREE.PlaneGeometry(26, 6.5),
       new THREE.MeshBasicMaterial({
-        map: signTexture(s.text, s.sub, { plate: false }), transparent: true, opacity: 0.5,
+        map: signTexture(s.text, s.sub, { plate: false }), transparent: true, opacity: 0.42,
         depthWrite: false, toneMapped: false,
       })
     );
     const da = a + rand(-0.7, 0.7);
-    const dr = rand(30, ARENA * 0.72);
+    const dr = rand(40, ARENA * 0.8);
     decal.rotation.x = -Math.PI / 2;
     decal.rotation.z = rand(0, TAU);
-    decal.position.set(Math.cos(da) * dr, 0.04, Math.sin(da) * dr);
+    decal.position.set(Math.cos(da) * dr, 0.05, Math.sin(da) * dr);
     signs.add(decal);
   });
 

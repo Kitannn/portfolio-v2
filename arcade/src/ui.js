@@ -21,8 +21,15 @@ export function createLevelUp(host, { onPick }) {
           <div class="cards">
             ${cards.map((c, i) => {
               const owned = taken[c.id] || 0;
+              // A legendary or mythic pull is the rarest thing that happens in a run, so it is
+              // allowed to announce itself: a shockwave on arrival, then a border that keeps
+              // glinting while the choice is open.
+              const big = c.rarity === "legendary" || c.rarity === "mythic";
               return `
-              <button class="card ${c.weapon ? "is-weapon" : ""}" data-i="${i}" style="--r: var(${RARITY[c.rarity].color})" type="button">
+              <button class="card ${c.weapon ? "is-weapon" : ""} ${big ? "card-rare-pop" : ""}" data-i="${i}" style="--r: var(${RARITY[c.rarity].color})" type="button">
+                ${big ? `<span class="pop-burst" aria-hidden="true"><i></i><i></i></span>
+                <span class="pop-rays" aria-hidden="true">${Array.from({ length: 10 }, (_, n) => `<i style="--a:${n * 36}deg;--d:${(n % 3) * 40}ms"></i>`).join("")}</span>
+                <span class="pop-sparks" aria-hidden="true">${Array.from({ length: 7 }, (_, n) => `<i style="--x:${(n * 37) % 90 + 5}%;--y:${(n * 53) % 80 + 10}%;--d:${n * 90}ms"></i>`).join("")}</span>` : ""}
                 <span class="card-rar">${RARITY[c.rarity].label}${c.weapon ? `<i class="card-wpn">Weapon</i>` : ""}</span>
                 <h3>${esc(c.name)}</h3>
                 <p>${esc(owned && c.levelDesc ? c.levelDesc : c.desc)}</p>

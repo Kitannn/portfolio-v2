@@ -226,6 +226,15 @@ export function createEnemies(scene, fx, hooks = {}) {
     b.renderOrder = 4;
     scene.add(b);
   }
+  // Same trap as the flora pool: an InstancedMesh starts every instance on an identity matrix,
+  // so without this the whole bar pool renders as one unit quad at the origin — a black square
+  // sitting under the car on the title screen, visible only from the front because the plane is
+  // single-sided.
+  for (const b of [barBgMesh, barFgMesh]) {
+    for (let i = 0; i < BARS; i++) b.setMatrixAt(i, HIDDEN);
+    b.instanceMatrix.needsUpdate = true;
+  }
+
   const BAR_W = 1.7, BAR_H = 0.17;
   const BAR_TOP = { jeep: 2.25, bike: 1.85, drone: 1.05 };
   const COL_FULL = new THREE.Color(0x6de08a);

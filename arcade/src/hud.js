@@ -48,6 +48,8 @@ export function createHud(root, { onFreeLook, onPause } = {}) {
       <i class="cam-icon"></i><span data-k="camlabel">Chase</span><em>L CTRL</em>
     </button>
 
+    <div class="hud-toast" data-k="toast" hidden><b data-k="toasthead"></b><span data-k="toastbody"></span></div>
+
     <div class="hud-hint">WASD drive · SHIFT boost · SPACE handbrake · CLICK fire · R reload · L CTRL free look</div>
     <button class="pause-btn" data-k="pause" type="button" aria-label="Pause"><i></i><i></i></button>
     <div class="hud-cross" data-k="cross" hidden><i></i><i></i><i></i><i></i><b></b></div>
@@ -76,6 +78,7 @@ export function createHud(root, { onFreeLook, onPause } = {}) {
   k.cam.addEventListener("click", () => onFreeLook?.());
   k.pause.addEventListener("click", () => onPause?.());
   let flashLeft = 0;
+  let toastLeft = 0;
 
   const setBar = (b, value, max, dt, text) => {
     const f = max > 0 ? clamp(value / max, 0, 1) : 0;
@@ -92,10 +95,24 @@ export function createHud(root, { onFreeLook, onPause } = {}) {
 
   return {
     root,
-    show: (on) => { root.hidden = !on; },
+    show: (on) => { root.hidden = !on; if (!on) { k.toast.hidden = true; toastLeft = 0; } },
 
     // called on damage so the screen edge pulses red
     hurt(amount) { flashLeft = Math.min(1, flashLeft + clamp(amount / 30, 0.25, 1)); },
+
+    // A reward you drove over is worth saying loudly and in the middle of the screen — it was
+    // small print in the top bar before, which is the one place a driver is not looking.
+    toast(head, body, secs = 2.6, tone = "") {
+      k.toasthead.textContent = head;
+      k.toastbody.textContent = body;
+      k.toast.className = `hud-toast${tone ? ` ${tone}` : ""}`;
+      k.toast.hidden = false;
+      // restart the animation even if one is already running
+      k.toast.style.animation = "none";
+      void k.toast.offsetWidth;
+      k.toast.style.animation = "";
+      toastLeft = secs;
+    },
 
     update(dt, s) {
       setBar(bars.hp, s.hp, s.maxHp, dt, `${Math.ceil(s.hp)}`);
@@ -154,6 +171,11 @@ export function createHud(root, { onFreeLook, onPause } = {}) {
       } else if (!k.bossbox.hidden) {
         k.bossbox.hidden = true;
         lastBossState = "";
+      }
+
+      if (toastLeft > 0) {
+        toastLeft -= dt;
+        if (toastLeft <= 0) k.toast.hidden = true;
       }
 
       if (flashLeft > 0) {

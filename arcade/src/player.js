@@ -214,7 +214,7 @@ export function createPlayer(scene, getStats) {
     s.gunYawWorld = worldYaw;
     car.gunYaw.rotation.y = worldYaw - s.yaw;      // gunYaw is parented to the car
     const flat = Math.hypot(dx, dz);
-    car.gunPitch.rotation.x = clamp(Math.atan2(target.y - gunWorld.y, flat), -0.22, 0.42);
+    car.gunPitch.rotation.x = clamp(Math.atan2(target.y - gunWorld.y, flat), -0.22, 0.85);
   };
 
   return s;
@@ -235,12 +235,21 @@ export function createPlayer(scene, getStats) {
 // same distance out. Pitch is what moves the crosshair up and down the world — tilting down pulls
 // the aim point in close, tilting toward the horizon pushes it out — so the reticle is always
 // exactly under the crosshair at the middle of the screen.
-const PITCH_MIN = 0.07;        // any flatter and the camera clips through the ground
-const PITCH_MAX = 1.08;        // any steeper and it is a top-down view
+//
+// Pitch runs from nearly straight up to nearly straight down. Neither extreme can keep orbiting at
+// the same radius: swinging all the way up would put the camera underground, and all the way down
+// would sit it inside the roof. So the radius is shaped by the angle — look up and the camera draws
+// in until it is perched just above the roof looking skyward; look down and it pushes out so the
+// car stays a shape on the ground rather than filling the lens.
+const PITCH_MIN = -1.44;       // straight up, stopping just short of the lookAt singularity
+const PITCH_MAX = 1.44;        // ...and straight down
 const PITCH_REST = 0.34;       // what chase mode sits at, and where mouse-look starts
 const PIVOT_Y = 1.45;          // the point on the car the camera orbits
+const CAM_FLOOR = 2.0;         // never below this: clears the roof and the gun, and the ground
+const PULL_IN = 0.84;          // share of the radius given up looking straight up
+const PUSH_OUT = 0.55;         // ...and added looking straight down
 const AIM_H = 13.5;            // effective height the aim ray falls from; sets how pitch maps to reach
-const AIM_MIN = 7, AIM_MAX = 85;
+const AIM_MIN = 5, AIM_MAX = 85;
 
 export function createChaseCam(camera) {
   let shake = 0;
@@ -274,10 +283,10 @@ export function createChaseCam(camera) {
       const height = 4.5 + clamp(sp * 0.030, 0, 1.4);
 
       if (freeLook) {
-        // 1:1 with the mouse on both axes. Down on the mouse is down in the world, which swings
-        // the camera up and over so it looks down — the usual orbit-cam inversion, and the one
-        // that matches every third-person shooter.
-        camYaw += lookDelta;
+        // 1:1 with the mouse on both axes. Mouse right turns the view right: the camera's heading
+        // is (sin yaw, cos yaw) and, looking down +Z, screen-right is -X — so a rightward turn is
+        // a DECREASING yaw, the same convention the car's own steering already uses.
+        camYaw -= lookDelta;
         camPitch = clamp(camPitch + lookDeltaY, PITCH_MIN, PITCH_MAX);
       } else {
         const want = player.yaw - clamp(player.slip * 0.012, -0.30, 0.30);
@@ -285,16 +294,28 @@ export function createChaseCam(camera) {
         camPitch += (PITCH_REST - camPitch) * damp(5.0, dt);
       }
 
-      // where the crosshair lands: straight down the camera's heading, at a distance set by pitch
-      const reach = clamp(AIM_H / Math.tan(Math.max(PITCH_MIN, camPitch)), AIM_MIN, AIM_MAX);
-      aim.set(player.pos.x + Math.sin(camYaw) * reach, 1.1, player.pos.z + Math.cos(camYaw) * reach);
+      // Where the crosshair lands: down the camera's heading, at a distance set by pitch. Below the
+      // horizon that is a point on the ground; above it there is no ground to hit, so the aim keeps
+      // climbing into the sky at full reach — which is what lets the view carry on past the horizon
+      // instead of jamming against it.
+      const slope = Math.tan(camPitch);
+      const reach = slope > AIM_H / AIM_MAX ? clamp(AIM_H / slope, AIM_MIN, AIM_MAX) : AIM_MAX;
+      aim.set(
+        player.pos.x + Math.sin(camYaw) * reach,
+        1.1 + (slope < 0 ? -slope * reach : 0),
+        player.pos.z + Math.cos(camYaw) * reach
+      );
 
       if (freeLook) {
-        // swing around the car on both axes, holding the same distance out
-        const flat = dist * Math.cos(camPitch);
+        // Swing around the car on both axes, drawing in overhead and pushing out underneath so
+        // neither extreme ends up inside the shell.
+        const upK = clamp(camPitch / PITCH_MIN, 0, 1);      // 1 looking straight up, 0 at the horizon
+        const dnK = clamp(camPitch / PITCH_MAX, 0, 1);      // ...and 1 looking straight down
+        const orbit = dist * (1 - PULL_IN * upK * upK) * (1 + PUSH_OUT * dnK * dnK);
+        const flat = orbit * Math.cos(camPitch);
         goal.set(
           player.pos.x - Math.sin(camYaw) * flat,
-          PIVOT_Y + dist * Math.sin(camPitch),
+          Math.max(CAM_FLOOR, PIVOT_Y + orbit * Math.sin(camPitch)),
           player.pos.z - Math.cos(camYaw) * flat
         );
         look.copy(aim);                 // so the reticle sits dead centre, under the crosshair

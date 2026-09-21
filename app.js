@@ -341,7 +341,7 @@
         ${FEAT.devices ? devices() : clouds()}
         <div class="hero-caption"><p><b>${esc(S.name)}</b><br>game designer<br>portfolio</p>${mark(S.name, undefined, "konami")}</div>
         <button class="pill ghost restore" type="button" hidden>Restore windows ↺</button>
-        <div class="hero-hint">drag the windows · ${FEAT.devices ? "bump the gadgets" : "poke the clouds"} · click the barcodes</div>
+        <div class="hero-hint"><span class="hint-fine">drag the windows · ${FEAT.devices ? "bump the gadgets" : "poke the clouds"} · click the barcodes</span><span class="hint-touch">drag the windows · swipe the ${FEAT.devices ? "gadgets" : "clouds"} · tap the barcodes</span></div>
         <a class="pak" href="${esc(asset("arcade/"))}" data-arcade aria-label="Arcade">
           <span class="pak-well" aria-hidden="true">
             <span class="pak-cart"><i class="pak-lip"></i><i class="pak-label"></i><i class="pak-grip"></i></span>
@@ -726,7 +726,15 @@
     const layers = [...hero.querySelectorAll(".layer")];
     const wins = [...hero.querySelectorAll(".float-win")];
     const fine = matchMedia("(pointer: fine)").matches;
-    const mouse = { x: -1e4, y: -1e4, px: -1e4, py: -1e4, in: false };
+    // `touching` is a finger currently down on the hero. A mouse is always "there" and can hover;
+    // a finger only exists between down and up, so the two drive the same coordinates but the
+    // finger has to explicitly arrive and leave — otherwise the last tap stays in the scene as an
+    // invisible obstacle the gadgets keep bouncing off.
+    const mouse = { x: -1e4, y: -1e4, px: -1e4, py: -1e4, in: false, touching: false, hovering: false };
+    // `fine` is only the media query's opinion at load. A real mouse moving over the hero settles
+    // it either way, which covers the touchscreen laptop the query calls coarse and the tablet
+    // someone has plugged a mouse into.
+    const poking = () => mouse.in && (fine || mouse.touching || mouse.hovering);
     let W = 0, H = 0;
     const onResize = () => {
       W = hero.clientWidth; H = hero.clientHeight;
@@ -736,11 +744,30 @@
     addEventListener("resize", onResize);
     onCleanup(() => removeEventListener("resize", onResize));
 
-    hero.addEventListener("pointermove", (e) => {
+    const trackPointer = (e) => {
       const r = hero.getBoundingClientRect();
       mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top; mouse.in = true;
-    });
+      if (e.pointerType === "mouse") mouse.hovering = true;
+    };
+    hero.addEventListener("pointermove", trackPointer);
     hero.addEventListener("pointerleave", () => { mouse.in = false; });
+
+    // Touch: a finger arriving is the equivalent of the cursor entering, and it brings its own
+    // previous position with it — without that the first tap reads as a jump from (-10000, -10000)
+    // and launches whatever it lands on clean across the screen.
+    hero.addEventListener("pointerdown", (e) => {
+      if (e.pointerType === "mouse") return;
+      trackPointer(e);
+      mouse.px = mouse.x; mouse.py = mouse.y;
+      mouse.touching = true;
+    }, { passive: true });
+    const liftFinger = (e) => {
+      if (e.pointerType === "mouse") return;
+      mouse.touching = false;
+      mouse.in = false;
+    };
+    hero.addEventListener("pointerup", liftFinger);
+    hero.addEventListener("pointercancel", liftFinger);
 
     // Window lens: the image sits on a fixed field in hero space; the window chooses which part shows.
     wins.forEach((win) => {
@@ -798,7 +825,7 @@
           b.vy += (Math.sin(b.heading) * b.cruise - b.vy) * relax;
         }
         // cursor collision: shove it away along the contact normal, plus some of the cursor's own motion
-        if (mouse.in && fine && dt > 0) {
+        if (poking() && dt > 0) {
           const dx = b.x - mouse.x, dy = b.y - mouse.y, d = Math.hypot(dx, dy), R = b.r + 14;
           if (d < R && d > 0.01) {
             const nx = dx / d, ny = dy / d, vn = mvx * nx + mvy * ny;
@@ -896,7 +923,7 @@
         b.heading += (Math.random() - 0.5) * 0.3 * dt;     // the course wanders, slowly
         b.vx += (Math.cos(b.heading) * b.cruise - b.vx) * ease;
         b.vy += (Math.sin(b.heading) * b.cruise - b.vy) * ease;
-        if (mouse.in && fine && dt > 0) {
+        if (poking() && dt > 0) {
           const dx = b.x - mouse.x, dy = b.y - mouse.y, d = Math.hypot(dx, dy), R = b.r + 14;
           if (d < R && d > 0.01) {
             const nx = dx / d, ny = dy / d, vn = mvx * nx + mvy * ny;
@@ -974,11 +1001,28 @@
         if (e.target.closest("[data-winclose]")) return;
         const sx = e.clientX, sy = e.clientY, ox = win.offsetLeft, oy = win.offsetTop;
         win.classList.add("dragging");
-        bar.setPointerCapture(e.pointerId);
-        const move = (ev) => { win.style.left = ox + ev.clientX - sx + "px"; win.style.top = oy + ev.clientY - sy + "px"; };
-        const up = () => { win.classList.remove("dragging"); bar.removeEventListener("pointermove", move); bar.removeEventListener("pointerup", up); };
+        // !important, because the narrow-screen rules pin two of these windows to fixed percentages
+        // with !important of their own — without matching it, a drag on a phone sets styles that
+        // the stylesheet quietly overrules and the window never moves.
+        const move = (ev) => {
+          win.style.setProperty("left", `${ox + ev.clientX - sx}px`, "important");
+          win.style.setProperty("top", `${oy + ev.clientY - sy}px`, "important");
+        };
+        const up = () => {
+          win.classList.remove("dragging");
+          bar.removeEventListener("pointermove", move);
+          bar.removeEventListener("pointerup", up);
+          bar.removeEventListener("pointercancel", up);
+        };
         bar.addEventListener("pointermove", move);
         bar.addEventListener("pointerup", up);
+        // a touch drag the browser decides to take over for scrolling ends here, not at pointerup
+        bar.addEventListener("pointercancel", up);
+        // Capture keeps the drag alive once the finger slides off the title bar, which on a phone
+        // it always does. It throws if the pointer has already gone, and that must not happen
+        // before the listeners above are attached — a throw there leaves the window grabbed for
+        // good, with nothing left listening for the release.
+        try { bar.setPointerCapture(e.pointerId); } catch { /* no capture; the drag still works over the bar */ }
       });
       win.querySelector("[data-winclose]").addEventListener("click", () => {
         win.classList.add("closed");

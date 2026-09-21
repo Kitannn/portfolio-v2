@@ -208,7 +208,7 @@ export function createMenus(host, { onClose, onVehicle } = {}) {
     {
       id: "time", label: "Time Survived",
       value: (r) => fmtTime(r.t), sort: (r) => r.t,
-      note: "Longest runs. ★ means the Colossus went down; CHEATS means codes were active.",
+      note: "Longest runs. ★ means the Colossus went down. CODES flags a run that used cheat codes; CHEATS flags one where the save itself had been edited.",
     },
     {
       id: "kills", label: "Enemies Destroyed",
@@ -227,6 +227,16 @@ export function createMenus(host, { onClose, onVehicle } = {}) {
     },
     { id: "deaths", label: "Deaths", accumulated: true, note: "Wrecks across every run, all time." },
   ];
+
+  // Two different things, deliberately spelled differently. CODES is a run that used the cheat
+  // codes hidden on the portfolio — earned, intended, just not comparable with a clean run. CHEATS
+  // is a run whose save failed its integrity check or that reached in through the debug hooks.
+  // Entries written before the two were split only carry the old `cheats` count, which was codes.
+  const codeFlag = (r) => {
+    const n = r.codes ?? r.cheats ?? 0;
+    return n ? `<i class="lb-cheat" title="${n} cheat code${n === 1 ? "" : "s"} active">CODES</i>` : "";
+  };
+  const hackFlag = (r) => (r.hacked ? `<i class="lb-cheat is-hack" title="This save was modified outside the game">CHEATS</i>` : "");
 
   let tab = "time";
 
@@ -252,7 +262,7 @@ export function createMenus(host, { onClose, onVehicle } = {}) {
         .map(({ r }, i) => `
           <li class="lb-row me">
             <span class="lb-rank">${i + 1}</span>
-            <span class="lb-name">${esc(me)}${r.won ? `<i class="lb-star" title="Beat the Colossus">★</i>` : ""}${r.cheats ? `<i class="lb-cheat" title="${r.cheats} cheat code${r.cheats === 1 ? "" : "s"} were active">CHEATS</i>` : ""}</span>
+            <span class="lb-name">${esc(me)}${r.won ? `<i class="lb-star" title="Beat the Colossus">★</i>` : ""}${codeFlag(r)}${hackFlag(r)}</span>
             <span class="lb-val">${spec.value(r)}</span>
           </li>`);
     }

@@ -16,13 +16,19 @@ export const MAX = 16;
 // and we overwrite this. Until then it is a plausible placeholder, not a claim.
 export function localeTag() {
   const raw = (navigator.languages && navigator.languages[0]) || navigator.language || "en";
-  const parts = raw.replace(/[^A-Za-z-]/g, "").split("-");
+  const parts = raw.replace(/[^A-Za-z0-9-]/g, "").split("-");
   const lang = (parts[0] || "en").toLowerCase().slice(0, 3);
-  const region = (parts[1] || "").toUpperCase().slice(0, 3);
-  return region ? `${lang}_${region}` : lang;
+  // The region is not simply the second subtag. BCP 47 puts an optional four-letter script in
+  // between, so zh-Hans-CN's region is CN, not "Han" — a region is two letters or three digits,
+  // and anything else in that slot is skipped.
+  const region = parts.slice(1).find((p) => /^[A-Za-z]{2}$/.test(p) || /^[0-9]{3}$/.test(p));
+  return region ? `${lang}_${region.toUpperCase()}` : lang;
 }
 
 export const makeTag = (n = 1) => `${localeTag()}${Math.max(1, n | 0)}`;
+
+// whatever tag this player already carries, or the one they are about to be given
+const tagNow = () => store.save().tag || makeTag(1);
 
 // name + tag, the form shown anywhere other people would see it
 export const displayName = (save) => (save.name ? save.name + (save.tag ? `#${save.tag}` : "") : "");
@@ -137,23 +143,27 @@ export function askName(host, onDone, { existing = "", canCancel = false } = {})
     <form class="name-wrap" autocomplete="off">
       <p class="name-kicker">${existing ? "Garage" : "Before you drive"}</p>
       <h2 class="name-title">${existing ? "Change your name" : "Pick a player name"}</h2>
-      <p class="name-note">Shown on the leaderboard when runs start being ranked. A tag
-        (<b>#${esc(localeTag())}1</b>) is added so two players can share a name.</p>
+      <p class="name-note">Shown on the leaderboard when runs start being ranked.</p>
       <label class="name-field">
         <input id="nameInput" type="text" maxlength="${MAX}" placeholder="player name" spellcheck="false"
                aria-label="Player name" autocapitalize="off" value="${esc(existing)}">
+        <span class="name-ghost" aria-hidden="true"><i></i><b>#${esc(tagNow())}</b></span>
         <span class="name-count"><b>0</b>/${MAX}</span>
       </label>
       <p class="name-msg" role="status"></p>
       <button class="big-btn" type="submit">${existing ? "Save" : "Drive"}</button>
-      ${canCancel ? `<button class="name-cancel" type="button" data-cancel>Cancel</button>` : ""}
+      <button class="name-cancel" type="button" data-cancel>${canCancel ? "Cancel" : "Back"}</button>
     </form>`;
 
   const form = host.querySelector("form");
   const input = host.querySelector("#nameInput");
   const msg = host.querySelector(".name-msg");
   const count = host.querySelector(".name-count b");
+  // The tag is never described in words — it just trails whatever is typed, in the field itself,
+  // sitting on a transparent copy of the text so it lands exactly where the caret leaves off.
+  const ghost = host.querySelector(".name-ghost i");
   setTimeout(() => { input.focus(); input.select(); }, 60);
+  validateLater();
 
   host.querySelector("[data-cancel]")?.addEventListener("click", () => {
     host.hidden = true;
@@ -163,6 +173,7 @@ export function askName(host, onDone, { existing = "", canCancel = false } = {})
 
   const validate = () => {
     count.textContent = input.value.length;
+    ghost.textContent = input.value;
     const v = input.value.trim();
     if (!v) { msg.textContent = ""; msg.className = "name-msg"; return null; }
     const res = checkName(input.value);
@@ -173,6 +184,7 @@ export function askName(host, onDone, { existing = "", canCancel = false } = {})
     return res;
   };
 
+  function validateLater() { ghost.textContent = input.value; }
   input.addEventListener("input", validate);
   form.addEventListener("submit", (e) => {
     e.preventDefault();

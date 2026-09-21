@@ -125,7 +125,9 @@ export function buildWorld(scene) {
   const stripMat = new THREE.MeshBasicMaterial({ color: 0x7cc6ff });
   const stripMat2 = new THREE.MeshBasicMaterial({ color: 0xff5f8f });
 
-  const PYLONS = 46;
+  // Bigger and further out than they were. They are backdrop now — the route down the middle of
+  // the plain carries the detail, and anything tall near it would just fight the billboards.
+  const PYLONS = 40;
   const pylons = new THREE.InstancedMesh(pylonGeo, pylonMat, PYLONS);
   const strips = new THREE.InstancedMesh(pylonGeo, stripMat, PYLONS);
   const m = new THREE.Matrix4();
@@ -135,9 +137,9 @@ export function buildWorld(scene) {
 
   for (let i = 0; i < PYLONS; i++) {
     const a = (i / PYLONS) * TAU + rand(-0.08, 0.08);
-    const r = rand(ARENA * 0.55, ARENA * 1.5);
-    const h = rand(14, 52);
-    const w = rand(3, 7);
+    const r = rand(ARENA * 1.12, ARENA * 2.1);
+    const h = rand(30, 110);
+    const w = rand(9, 22);
     pos.set(Math.cos(a) * r, h / 2, Math.sin(a) * r);
     q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rand(0, TAU));
     scl.set(w, h, w);
@@ -152,15 +154,18 @@ export function buildWorld(scene) {
   pylons.castShadow = false;
   props.add(pylons, strips);
 
-  // low slabs inside the arena for a sense of speed — flat enough to drive straight over
-  const SLABS = 34;
+  // low slabs for a sense of speed — flat enough to drive straight over
+  const SLABS = 26;
   const slabGeo = new THREE.CylinderGeometry(1, 1, 1, 6);
   const slabMat = new THREE.MeshStandardMaterial({ color: 0x101019, roughness: 0.95, metalness: 0.1, flatShading: true });
   const slabs = new THREE.InstancedMesh(slabGeo, slabMat, SLABS);
-  const slabGlow = new THREE.InstancedMesh(slabGeo, randInt(0, 1) ? stripMat : stripMat2, SLABS);
+  // Dim. At full strip brightness a hexagon this size reads as a splash of paint on the floor
+  // rather than a lit deck panel, and there is a road to look at now.
+  const slabGlowMat = new THREE.MeshBasicMaterial({ color: randInt(0, 1) ? 0x1d3045 : 0x3a1e2c, toneMapped: false });
+  const slabGlow = new THREE.InstancedMesh(slabGeo, slabGlowMat, SLABS);
   for (let i = 0; i < SLABS; i++) {
     const a = rand(0, TAU);
-    const r = rand(24, ARENA * 0.95);
+    const r = rand(40, ARENA * 0.95);
     const rad = rand(4, 11);
     pos.set(Math.cos(a) * r, 0.09, Math.sin(a) * r);
     q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rand(0, TAU));
