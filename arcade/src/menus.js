@@ -347,7 +347,7 @@ export function createMenus(host, { onClose, onVehicle } = {}) {
         ${rows.length ? rows.join("") : `<li class="lb-empty">${esc(empty)}</li>`}
       </ol>
       ${scope === "local" ? `<p class="lb-local">These are your runs on this browser. The Global tab
-        shows everyone's, and your <b>#${esc(s.tag || "")}</b> tag is how you appear there.</p>` : ""}`);
+        shows everyone's${s.tag ? `, and your <b>#${esc(s.tag)}</b> tag is how you appear there` : ""}.</p>` : ""}`);
 
     host.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => {
       tab = b.dataset.tab;
