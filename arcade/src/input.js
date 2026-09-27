@@ -52,6 +52,17 @@ export function attachInput(canvas, { onPause, onReload, onFreeLook, onLockLost 
   input.captureMouse = capture;
   input.releaseMouse = release;
 
+  // Leaving the page. The browser is supposed to drop pointer lock on its own when a document
+  // goes away, but it does not always get the cursor back on screen afterwards — and when it
+  // misses, the cursor stays hidden for the rest of the browser session, long after this tab has
+  // closed. Cheap enough to do it ourselves and be sure. `pagehide` rather than `beforeunload`,
+  // because the latter can cost the page its back/forward cache entry.
+  const standDown = () => { release(true); showCursor(true); };
+  addEventListener("pagehide", standDown);
+  // A tab switch drops the lock too. The browser fires pointerlockchange for it, but if the page
+  // is torn down before that lands this is the backstop.
+  document.addEventListener("visibilitychange", () => { if (document.hidden) showCursor(true); });
+
   const setFreeLook = (on) => {
     input.freeLook = on;
     input.lookDelta = input.lookDeltaY = 0;
@@ -60,9 +71,17 @@ export function attachInput(canvas, { onPause, onReload, onFreeLook, onLockLost 
   };
   input.setFreeLook = setFreeLook;
 
+  // The ONE place the cursor is hidden or given back. Tying `cursor: none` to the lock itself
+  // means the two can never disagree: there is no state, anywhere, in which the pointer is free
+  // to move but invisible. It used to be driven from the HUD's per-frame update, which stops
+  // running the moment anything interrupts the run — so pausing, levelling up or finishing left
+  // the class on and the cursor gone.
+  const showCursor = (visible) => document.body.classList.toggle("looking", !visible);
+
   document.addEventListener("pointerlockchange", () => {
     const locked = document.pointerLockElement === canvas;
     input.pointerLocked = locked;
+    showCursor(!locked);
     if (locked) return;
     input.lookDelta = input.lookDeltaY = 0;
     // Losing the cursor without asking — Esc, alt-tab — means the player has stopped playing, so

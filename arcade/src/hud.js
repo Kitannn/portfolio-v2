@@ -145,7 +145,8 @@ export function createHud(root, { onFreeLook, onPause } = {}) {
         k.cam.setAttribute("aria-pressed", String(!!s.freeLook));
         k.camlabel.textContent = s.freeLook ? "Mouse look" : "Chase";
         k.cross.hidden = !s.freeLook;
-        document.body.classList.toggle("looking", !!s.freeLook);
+        // The cursor is NOT touched here. It follows pointer lock, in input.js — this update only
+        // runs while the run is running, so anything it set would stick the moment one stopped.
         lastFree = s.freeLook;
       }
 

@@ -375,6 +375,9 @@ const levelUp = createLevelUp($("modalHost"), {
     run.pendingCards--;
     unfreezeIn = 0.5;                 // the spec's half-second before the world starts again
     state = STATE.PLAYING;
+    // Back to looking. The browser can refuse this — the click that got us here is old by now —
+    // in which case the cursor simply stays visible and clicking the canvas re-takes it.
+    if (input.freeLook) input.captureMouse?.();
   },
 });
 
@@ -405,10 +408,16 @@ function togglePause() {
 }
 
 const pause = createPause($("pauseHost"), {
-  onResume: () => { state = STATE.PLAYING; },
+  // Straight back through togglePause rather than just setting the state: resuming has to put the
+  // touch controls back and re-take the pointer, and doing that in two places is how they came to
+  // disagree — the Resume button did neither, so resuming with it left a phone with no controls
+  // and a desktop in mouse-look with a loose cursor.
+  onResume: () => togglePause(),
   onQuit: () => {
     // abandoning is not a death: nothing is recorded and nothing is paid
     hud.show(false);
+    input.releaseMouse?.(true);
+    input.setFreeLook?.(false);       // the menus are a cursor place; the next run starts in chase
     levelUp.close();
     refreshCredits();
     titleScreen.hidden = false;
@@ -447,6 +456,7 @@ function endRun(won) {
   store.recordRun(result);
   hud.show(false);
   touch.show(false);
+  input.releaseMouse?.(true);         // there are buttons on the finish screen
   levelUp.close();
   finish.show(result);
   state = STATE.FINISH;
@@ -495,7 +505,7 @@ function startRun() {
   foes.reset();
   subs.reset();
   scatter.reset(player);
-  input.freeLook = false;
+  input.setFreeLook?.(false);       // via the setter, so any held lock is dropped with the flag
   fx.reset();
   boss.reset();
   weakNote = ""; weakNoteIn = 0;
@@ -552,6 +562,9 @@ function frame(now) {
     // tilt in draw() keys off — so chests skew rare and up without needing a second table
     const lucky = run.luckyCards > 0;
     if (lucky) run.luckyCards--;
+    // Three cards to click, so the pointer has to come back — it stays IN mouse-look, exactly as
+    // pausing does, and the pick below takes it again.
+    input.releaseMouse?.(true);
     levelUp.show(draw(run.taken, run.level + (lucky ? 14 : 0)), run.level, run.taken, lucky);
     state = STATE.LEVELUP;
   }
