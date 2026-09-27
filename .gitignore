@@ -1,0 +1,5 @@
+# local dev database for the leaderboard worker (node server/test/serve.mjs)
+server/test/dev.sqlite
+server/test/dev.sqlite-*
+.wrangler/
+node_modules/

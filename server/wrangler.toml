@@ -1,0 +1,20 @@
+# Cloudflare Workers — free plan only.
+#
+# Nothing here reaches for a paid feature: no Durable Objects, no Queues, no R2, no cron triggers.
+# Workers Free covers 100k requests/day and D1 Free covers 5 GB, 5M row reads and 100k row writes
+# a day, which for a hidden arcade page is several orders of magnitude more than it will ever use.
+name = "hkitandrun-board"
+main = "src/worker.js"
+compatibility_date = "2026-09-01"
+
+# Set with:  wrangler secret put IP_SALT
+# Any random string. It only exists so the rate limiter can count requests per address without
+# the table ever holding an actual IP.
+
+[[d1_databases]]
+binding = "DB"
+database_name = "hkitandrun"
+database_id = "PASTE_THE_ID_FROM_wrangler_d1_create"
+
+[observability]
+enabled = true

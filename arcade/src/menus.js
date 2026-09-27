@@ -4,6 +4,7 @@ import { CARDS, RARITY } from "./cards.js";
 import { MASTERY, TIERS, VEHICLES, nextCost, refundValue, tierUnlocked, levelsToUnlock, totalLevels } from "./shop.js";
 import * as store from "./save.js";
 import * as ach from "./achievements.js";
+import * as online from "./online.js";
 import { displayName } from "./name.js";
 import { esc, fmtTime } from "./util.js";
 
@@ -207,7 +208,7 @@ export function createMenus(host, { onClose, onVehicle } = {}) {
   // later is a change of one function, not of the panel.
   const TABS = [
     {
-      id: "time", label: "Time Survived",
+      id: "time", label: "Time Survived", fmt: (v) => fmtTime(v),
       value: (r) => fmtTime(r.t), sort: (r) => r.t,
       note: "Longest runs. ★ means the Colossus went down. CODES flags a run that used cheat codes; CHEATS flags one where the save itself had been edited.",
     },
@@ -222,7 +223,7 @@ export function createMenus(host, { onClose, onVehicle } = {}) {
       note: "Most damage put out in a single run.",
     },
     {
-      id: "level", label: "Highest Level",
+      id: "level", label: "Highest Level", fmt: (v) => `LV ${v}`,
       value: (r) => `LV ${r.level}`, sort: (r) => r.level,
       note: "Furthest up the upgrade curve in one run.",
     },
@@ -240,6 +241,47 @@ export function createMenus(host, { onClose, onVehicle } = {}) {
   const hackFlag = (r) => (r.hacked ? `<i class="lb-cheat is-hack" title="This save was modified outside the game">CHEATS</i>` : "");
 
   let tab = "time";
+  // Which half of the board is showing. Local is the default and the fallback: it is the one that
+  // always works, and it is what the game has shown since before there was a server.
+  let scope = "local";
+  let fetching = false;
+  let boardErr = "";      // set on a failed fetch, and cleared by any deliberate click
+
+  const globalRows = (rows, spec) => rows.map((r, i) => `
+    <li class="lb-row ${r.tag && r.tag === store.save().tag && r.name === store.save().name ? "me" : ""}">
+      <span class="lb-rank">${i + 1}</span>
+      <span class="lb-name">${esc(r.name)}<i class="lb-tag">#${esc(r.tag)}</i>${
+        r.won ? `<i class="lb-star" title="Beat the Colossus">★</i>` : ""}${
+        r.codes ? `<i class="lb-cheat" title="${r.codes} cheat code${r.codes === 1 ? "" : "s"} active">CODES</i>` : ""}${
+        r.hacked ? `<i class="lb-cheat is-hack" title="This save was modified outside the game">CHEATS</i>` : ""}</span>
+      <span class="lb-val">${spec.fmt ? spec.fmt(r.value) : r.value.toLocaleString()}</span>
+    </li>`);
+
+  // The strip above the list: what going online means, and the one button that does it.
+  function onlineBar() {
+    if (!online.configured()) {
+      return `<p class="lb-online off">The online board is not switched on for this build yet.
+        Everything below is this browser's own records.</p>`;
+    }
+    const st = online.state();
+    if (online.enrolled()) {
+      return `<p class="lb-online on">Posting as <b>${esc(st.name)}#${esc(st.tag)}</b>.
+        <button class="lb-link" data-online="off" type="button">Stop posting</button>
+        ${online.lastSubmitError() ? `<i class="lb-warn">${esc(online.lastSubmitError())}</i>` : ""}</p>`;
+    }
+    const named = !!store.save().name;
+    return `<div class="lb-optin">
+      <p><b>Post your runs to the online board?</b></p>
+      <p>Your player name and your best scores are sent to a server and shown to other players.
+        Nothing else leaves this device — no email, no account, no tracking. You can stop at any time,
+        and declining changes nothing: the local records below keep working exactly as they do now.</p>
+      <div class="lb-optin-btns">
+        <button class="menu-btn" data-online="on" type="button" ${named ? "" : "disabled"}>
+          ${named ? "Post my runs" : "Set a player name first"}</button>
+        <button class="menu-btn" data-online="no" type="button">Stay local</button>
+      </div>
+    </div>`;
+  }
 
   function board() {
     const s = store.save();
@@ -247,8 +289,24 @@ export function createMenus(host, { onClose, onVehicle } = {}) {
     const spec = TABS.find((t) => t.id === tab) || TABS[0];
     const history = s.history || [];
 
+    // Global: one row per player, straight from the server. The local branch below is untouched.
+    const live = scope === "global" ? online.cached() : null;
+    if (scope === "global" && online.configured() && !live && !fetching && !boardErr) {
+      fetching = true;
+      online.fetchBoard().then(
+        () => { fetching = false; if (refresh === board) board(); },
+        (e) => {
+          fetching = false;
+          boardErr = e.message === "offline" ? "Not configured." : "Could not reach the board.";
+          if (refresh === board) board();
+        }
+      );
+    }
+
     let rows;
-    if (spec.accumulated) {
+    if (scope === "global") {
+      rows = live ? globalRows(live[spec.id] || [], spec) : [];
+    } else if (spec.accumulated) {
       rows = [`<li class="lb-row me">
           <span class="lb-rank">1</span>
           <span class="lb-name">${esc(me)}</span>
@@ -268,20 +326,61 @@ export function createMenus(host, { onClose, onVehicle } = {}) {
           </li>`);
     }
 
+    // "Nobody has posted yet" would be a lie when there is no server to post to.
+    const empty = scope !== "global" ? "No runs yet. Go and get wrecked."
+      : !online.configured() ? "The online board is not switched on for this build yet."
+      : fetching ? "Loading the board…"
+      : boardErr || "Nobody has posted a run yet. Be first.";
+
     open();
     host.innerHTML = shell("Leaderboard", `${s.runs || 0} run${s.runs === 1 ? "" : "s"} recorded`, `
+      <nav class="lb-scope">
+        <button class="lb-sc ${scope === "global" ? "on" : ""}" data-scope="global" type="button">Global</button>
+        <button class="lb-sc ${scope === "local" ? "on" : ""}" data-scope="local" type="button">Your runs</button>
+      </nav>
+      ${onlineBar()}
       <nav class="lb-tabs">
         ${TABS.map((t) => `<button class="lb-tab ${t.id === tab ? "on" : ""}" data-tab="${t.id}" type="button">${esc(t.label)}</button>`).join("")}
       </nav>
       <p class="lb-note">${esc(spec.note)}</p>
       <ol class="lb-list">
-        ${rows.length ? rows.join("") : `<li class="lb-empty">No runs yet. Go and get wrecked.</li>`}
+        ${rows.length ? rows.join("") : `<li class="lb-empty">${esc(empty)}</li>`}
       </ol>
-      <p class="lb-local">Local records only — these are your runs on this browser. The online board
-        opens once runs can be submitted, and your <b>#${esc(s.tag || "")}</b> tag is what will carry over.</p>`);
+      ${scope === "local" ? `<p class="lb-local">These are your runs on this browser. The Global tab
+        shows everyone's, and your <b>#${esc(s.tag || "")}</b> tag is how you appear there.</p>` : ""}`);
 
     host.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => {
       tab = b.dataset.tab;
+      boardErr = "";
+      board();
+    }));
+    host.querySelectorAll("[data-scope]").forEach((b) => b.addEventListener("click", () => {
+      scope = b.dataset.scope;
+      boardErr = "";
+      board();
+    }));
+    host.querySelectorAll("[data-online]").forEach((b) => b.addEventListener("click", async () => {
+      const what = b.dataset.online;
+      if (what === "no") { online.setConsent(false); board(); return; }
+      if (what === "off") {
+        confirmDialog({
+          title: "Stop posting runs?",
+          body: `<p>New runs stop being sent. Scores you have already posted stay on the board under
+                 the same name — turning it back on later does not give you a second identity.</p>`,
+          confirmLabel: "Stop posting",
+          onYes: () => { online.setConsent(false); board(); },
+        });
+        return;
+      }
+      b.disabled = true;
+      b.textContent = "Joining…";
+      try {
+        await online.enroll(store.save().name);
+        online.invalidate();
+        scope = "global";
+      } catch (e) {
+        boardErr = e.status === 422 ? "That name was refused by the server." : "Could not reach the board.";
+      }
       board();
     }));
     refresh = board;
@@ -350,11 +449,16 @@ export function createMenus(host, { onClose, onVehicle } = {}) {
           <li><b>Vehicles</b> back to the Starter Vehicle</li>
           <li>All <b>records</b> — ${s.runs || 0} runs, ${s.deaths || 0} deaths, every leaderboard entry</li>
           <li>Every <b>achievement</b> — ${ach.earned(s)}/${ach.total()} earned, and the permanent bonuses they grant</li>
-          <li>Your <b>player name</b></li>
+          <li>Your <b>player name</b>${online.enrolled() ? " and the identity you post under" : ""}</li>
         </ul>
         <p class="confirm-note">Cheat codes found on the portfolio are not stored here and stay unlocked.</p>`,
       confirmLabel: "Erase everything",
-      onYes: () => { store.wipe(); close(); afterWipe?.(); },
+      onYes: () => {
+        store.wipe();
+        online.forget();     // the local half of it; rows already on the board are not ours to delete
+        close();
+        afterWipe?.();
+      },
     });
   }
 

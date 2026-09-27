@@ -20,7 +20,9 @@ import { askName, displayName } from "./name.js";
 import { applyMastery } from "./shop.js";
 import * as store from "./save.js";
 import * as cheats from "./cheats.js";
+import * as online from "./online.js";
 import * as ach from "./achievements.js";
+import { implausible, inconsistent } from "./run-bounds.js";
 import { clamp, damp, esc } from "./util.js";
 
 const $ = (id) => document.getElementById(id);
@@ -489,21 +491,19 @@ function endRun(won) {
     fastBoss: won && run.elapsed - BOSS_AT <= 30,
   };
   result.credits = Math.round((creditsFor(result) + run.chestCredits) * (run.stats.creditMult || 1));
-  // A last look at the numbers before they are banked. These bounds are far outside anything the
-  // game can produce — they are here to catch a value that was written from outside it, not to
-  // second-guess a good run.
-  if (
-    result.elapsed < 0 || result.kills < 0 ||
-    result.kills > result.elapsed * 12 + 60 ||
-    result.level > 10 + result.elapsed / 2.5 ||
-    result.accuracy > 1.001 ||
-    result.damage > (result.fired + 40) * 400
-  ) store.flagTamper("run values out of range");
+  // A last look at the numbers before they are banked, against the same rules the leaderboard
+  // Worker applies on submit — see run-bounds.js for why they live in one file.
+  const broke = implausible(result) || inconsistent(result);
+  if (broke) store.flagTamper(`run values out of range: ${broke}`);
   result.hacked = store.isTampered();
   store.recordRun(result);
 
   // Achievements are settled after the run is banked, so they see the counters this run just
   // moved. Credits are paid here — achievements.js deliberately never touches the wallet.
+  // Fire and forget, deliberately not awaited: a slow or missing server must never be something
+  // the player waits behind on their own finish screen.
+  online.submitRun(result);
+
   result.unlocked = ach.evaluate(store.save());
   const payout = result.unlocked.reduce((n, a) => n + (a.credits || 0), 0);
   if (payout) store.save().credits += payout;
