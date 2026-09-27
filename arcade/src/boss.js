@@ -30,6 +30,10 @@ const DISABLE_TIME = 30;
 
 const WALK_SPEED = 9.5;
 const GNX_SPEED = 42;
+// How close the centre of each form may get to the barrier. The Colossus is enormous, so it has to
+// stop a long way short of the wall or its shoulders end up outside the colosseum.
+const WALK_LIMIT = ARENA - 26;
+const GNX_LIMIT = ARENA - 10;
 const MAX_ROCKETS = 14;
 
 // ---- materials ------------------------------------------------------------------
@@ -272,6 +276,35 @@ export function createBoss(scene, fx, hooks = {}) {
   shieldMesh.position.y = 9.0;
   root.add(shieldMesh);
 
+  // ---- making it findable ------------------------------------------------------
+  // The Colossus is black, the GNX is the blackest car anyone ever sold, and the arena is a night
+  // stadium — left alone the thing you are supposed to be fighting is a hole in the picture. Three
+  // things fix it, none of which change its silhouette: a hazard ring painted on the floor beneath
+  // it, a light that travels with it, and lit edges down the car in phase two.
+  const markMat = new THREE.MeshBasicMaterial({
+    color: 0xff3b2e, transparent: true, opacity: 0.5, depthWrite: false,
+    blending: THREE.AdditiveBlending, side: THREE.DoubleSide, toneMapped: false,
+  });
+  const mark = new THREE.Mesh(new THREE.RingGeometry(0.88, 1, 72), markMat);
+  mark.rotation.x = -Math.PI / 2;
+  mark.position.y = 0.07;
+  mark.renderOrder = 3;
+  mark.visible = false;
+  root.add(mark);
+
+  const markInner = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.48, 48), markMat.clone());
+  markInner.rotation.x = -Math.PI / 2;
+  markInner.position.y = 0.07;
+  markInner.renderOrder = 3;
+  markInner.visible = false;
+  root.add(markInner);
+
+  // Built at load with no intensity rather than added on spawn: a light arriving mid-run
+  // recompiles every lit material in the scene, and that is a visible hitch at the worst moment.
+  const bossLight = new THREE.PointLight(0xff6a44, 0, 34, 2);
+  bossLight.position.set(0, 3.4, 0);
+  root.add(bossLight);
+
   // ---- GNX ----
   const gnx = new THREE.Group();
   gnx.visible = false;
@@ -327,6 +360,29 @@ export function createBoss(scene, fx, hooks = {}) {
       rim.position.set(x * 1.03, 0.40, z);
       gnx.add(rim);
     }
+    // Lit edges. A matte black car at night is a silhouette at best and invisible at worst, so
+    // the shape is drawn back in with strips along the lines you would read anyway: the rockers,
+    // the beltline, the roof rail, and a bar under the sills.
+    const edgeM = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xff5630, emissiveIntensity: 3.2, roughness: 1, toneMapped: false });
+    for (const sx of [-1, 1]) {
+      const rocker = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 4.3), edgeM);
+      rocker.position.set(sx * 0.94, 0.30, -0.1);
+      gnx.add(rocker);
+      const belt = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 3.5), edgeM);
+      belt.position.set(sx * 0.93, 0.95, -0.15);
+      gnx.add(belt);
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 2.0), edgeM);
+      rail.position.set(sx * 0.80, 1.38, -0.4);
+      gnx.add(rail);
+    }
+    const underglow = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 4.4), new THREE.MeshBasicMaterial({
+      color: 0xff5630, transparent: true, opacity: 0.55, depthWrite: false,
+      blending: THREE.AdditiveBlending, toneMapped: false,
+    }));
+    underglow.rotation.x = -Math.PI / 2;
+    underglow.position.set(0, 0.12, -0.1);
+    gnx.add(underglow);
+
     const wind = new THREE.Mesh(new THREE.BoxGeometry(1.58, 0.02, 0.92), gnxGlass);
     wind.position.set(0, 1.20, 0.46);
     wind.rotation.x = 0.52;
@@ -427,7 +483,7 @@ export function createBoss(scene, fx, hooks = {}) {
       const a = rand(0, TAU);
       const r = Math.min(ARENA - 30, 60);
       b.pos.set(player.pos.x + Math.cos(a) * r, 0, player.pos.z + Math.sin(a) * r);
-      if (Math.hypot(b.pos.x, b.pos.z) > ARENA - 20) b.pos.multiplyScalar((ARENA - 20) / Math.hypot(b.pos.x, b.pos.z));
+      if (Math.hypot(b.pos.x, b.pos.z) > WALK_LIMIT) b.pos.multiplyScalar(WALK_LIMIT / Math.hypot(b.pos.x, b.pos.z));
       b.yaw = Math.atan2(player.pos.x - b.pos.x, player.pos.z - b.pos.z);
       root.visible = true;
       for (const p of bodyParts) p.alive = true;
@@ -470,6 +526,7 @@ export function createBoss(scene, fx, hooks = {}) {
 
     update(dt, player, stats, camera) {
       if (!b.active) return;
+      markPulse += dt;
       tick(dt, player);
       syncTargets();
       updateRockets(dt, player);
@@ -480,6 +537,8 @@ export function createBoss(scene, fx, hooks = {}) {
   let state = { name: "walk", t: 0 };
   let mgBurst = 0, mgTimer = 0, rocketTimer = 0, stompTimer = 0, beamTimer = 0;
   let walkCycle = 0, hitFlash = 0, morph = 0;
+  let markPulse = 0;                    // drives the breathing of the floor marker
+  let gnxDust = 0, gnxFlame = 0;        // carried emission fractions, as in fx.trails
   let playerRef = null;
 
   function breakWeakPoint(part) {
@@ -603,6 +662,11 @@ export function createBoss(scene, fx, hooks = {}) {
     } else if (state.name !== "beam") {
       b.yaw += clamp(angleDelta(b.yaw, toPlayer), -0.5 * dt, 0.5 * dt);
     }
+
+    // Keep it in the bowl. On foot it used to be clamped nowhere at all, so given long enough
+    // walking at the player it would simply stride out through the grandstand.
+    const wr = Math.hypot(b.pos.x, b.pos.z);
+    if (wr > WALK_LIMIT) { b.pos.x *= WALK_LIMIT / wr; b.pos.z *= WALK_LIMIT / wr; }
 
     if (state.name === "kneel" && !legsBroken()) state = { name: "walk", t: 0 };
 
@@ -754,6 +818,21 @@ export function createBoss(scene, fx, hooks = {}) {
     root.rotation.y = b.yaw;
     shieldMesh.position.set(0, 9.0, 0);
     shieldMesh.rotation.y += 0.002;
+
+    // the ground marker sizes itself to whichever form is on the field, and breathes
+    const on = b.active && !b.dying;
+    mark.visible = markInner.visible = on;
+    if (on) {
+      const want = b.phase === 2 ? 7.0 : 16.0;
+      mark.scale.setScalar(want);
+      markInner.scale.setScalar(want * (1.06 + Math.sin(markPulse * 2.2) * 0.22));
+      markMat.opacity = 0.34 + Math.sin(markPulse * 2.6) * 0.14;
+      markInner.material.opacity = 0.30 + Math.sin(markPulse * 2.2 + 1) * 0.16;
+      bossLight.intensity = b.phase === 2 ? 115 : 85;
+      bossLight.position.y = b.phase === 2 ? 1.8 : 6.0;
+    } else {
+      bossLight.intensity = 0;
+    }
   }
 
   // ---- transformation ----
@@ -816,8 +895,32 @@ export function createBoss(scene, fx, hooks = {}) {
     b.pos.x += Math.sin(b.yaw) * sp * dt;
     b.pos.z += Math.cos(b.yaw) * sp * dt;
 
+    // The car is five metres long and the barrier is eleven metres high — keep the whole thing
+    // on the floor, not just its centre point.
     const rr = Math.hypot(b.pos.x, b.pos.z);
-    if (rr > ARENA - 8) { b.pos.x *= (ARENA - 8) / rr; b.pos.z *= (ARENA - 8) / rr; }
+    if (rr > GNX_LIMIT) { b.pos.x *= GNX_LIMIT / rr; b.pos.z *= GNX_LIMIT / rr; }
+
+    // ---- it is a car: it smokes and it burns ----
+    const sy = Math.sin(b.yaw), cy = Math.cos(b.yaw);
+    gnxDust += dt * 26;
+    const puffs = Math.min(4, Math.floor(gnxDust));
+    gnxDust -= puffs;
+    for (let n = 0; n < puffs; n++) for (const ox of [-0.95, 0.95]) {
+      fx.dust(
+        b.pos.x + (-cy * ox + sy * -1.32),
+        b.pos.z + (sy * ox + cy * -1.32),
+        -sy * sp * 0.10, -cy * sp * 0.10, 1.5,
+      );
+    }
+    gnxFlame += dt * 60;
+    const licks = Math.min(4, Math.floor(gnxFlame));
+    gnxFlame -= licks;
+    for (let n = 0; n < licks; n++) for (const ox of [-0.5, 0.5]) {
+      fx.jet(
+        b.pos.x + (-cy * ox + sy * -2.5), 0.45, b.pos.z + (sy * ox + cy * -2.5),
+        -sy * 11, 0.3, -cy * 11, 1.25,
+      );
+    }
 
     // the pods on its flanks fire back down its own tail
     mgTimer -= dt;

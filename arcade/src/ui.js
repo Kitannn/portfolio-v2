@@ -2,6 +2,7 @@
 // Both are plain DOM built on demand — they only exist while the world is frozen.
 import { RARITY, CARDS_BY_ID } from "./cards.js";
 import { esc, fmtTime } from "./util.js";
+import * as ach from "./achievements.js";
 
 // ---- level up ------------------------------------------------------------------
 export function createLevelUp(host, { onPick }) {
@@ -149,7 +150,19 @@ export function createFinish(host, { onMenu, onRetry }) {
             <p class="chip-info" hidden></p>
           </div>
 
-          <p class="fin-credits">◆ <b>+${result.credits}</b> credits</p>
+          ${result.unlocked && result.unlocked.length ? `
+          <div class="fin-ach">
+            <p class="fin-sub">Achievement${result.unlocked.length > 1 ? "s" : ""} unlocked</p>
+            ${result.unlocked.map((a) => `
+              <div class="fin-ach-row" style="--t: var(${ach.TIERS[a.tier].color})">
+                <b>${esc(a.name)}</b>
+                <span>${esc(a.desc)}</span>
+                <em>${esc(ach.rewardText(a)) || "\u2014"}</em>
+              </div>`).join("")}
+          </div>` : ""}
+
+          <p class="fin-credits">◆ <b>+${result.credits}</b> credits${
+            result.achCredits ? ` <i class="fin-bonus">+${result.achCredits} earned</i>` : ""}</p>
 
           <div class="fin-btns">
             <button class="menu-btn" data-fin="retry" type="button">Try Again</button>

@@ -22,8 +22,8 @@ const TIERS = 10;
 const TIER_RISE = 3.6;
 const TIER_RUN = 4.0;
 const ART_BOTTOM = 47;         // the vertical band above the seating that the key art hangs on
-const ART_TOP = 84;            // 37 m of it, which is what a 54 m wide 16:9 panel needs
-const CROWN = 96;
+const ART_TOP = 96;            // 49 m of band: enough for a 66 m wide 16:9 panel and a caption
+const CROWN = 110;
 
 const ART = "../thumbs/m/games/";
 
@@ -32,34 +32,59 @@ const ART = "../thumbs/m/games/";
 // thumbnails — a full-size cover is several megabytes of texture for something hung 260 m away.
 export const STANDS = [
   {
-    org: "KEYWORDS STUDIOS", sub: "QA DEVELOPMENT SUPPORT", when: "2019 — 2021",
+    org: "KEYWORDS STUDIOS", role: "QA DEVELOPMENT SUPPORT III", when: "2019 — 2021",
     line: "Test plans, regression, node-based automation",
+    duties: [
+      "Test plans and regression for live content",
+      "Node-based automation for validation",
+      "QA process docs; trained analysts",
+    ],
     accent: 0x56d06d, art: [],
   },
   {
-    org: "KEYWORDS — EA", sub: "GAME SECURITY ANALYST", when: "2021 — 2022",
+    org: "KEYWORDS — EA", role: "GAME SECURITY ANALYST", when: "2021 — 2022",
     line: "Anti-cheat, Splunk dashboards, game integrity",
+    duties: [
+      "Anti-cheat and game-integrity enforcement",
+      "Python and Splunk threat investigation",
+      "Dashboards for player data and health",
+    ],
     accent: 0x4fd6c0, art: [],
   },
   {
-    org: "EA SPORTS", sub: "FIFA MOBILE · GAME DESIGNER", when: "2022",
+    org: "EA SPORTS", role: "GAME DESIGNER · FIFA MOBILE", when: "2022",
     line: "Live gameplay tuning, telemetry, weekly deploys",
+    duties: [
+      "Tuned live gameplay from telemetry",
+      "Owned weekly live content deploys",
+      "Front-end feature design and prototyping",
+    ],
     accent: 0x7cc6ff, art: [
       { file: "fifa-mobile-22.webp", cap: "FIFA MOBILE" },
       { file: "fifam-ultimate-team.webp", cap: "ULTIMATE TEAM" },
     ],
   },
   {
-    org: "EA", sub: "TECHNICAL GAME DESIGNER", when: "2022 — 2023",
+    org: "EA", role: "TECHNICAL GAME DESIGNER · FIFA MOBILE", when: "2022 — 2023",
     line: "Haxe on Impact, designer toolsets, World Cup live event",
+    duties: [
+      "Front-end features in Haxe on Impact",
+      "Designer toolsets in C++ and Haxe",
+      "2022 World Cup event — record DAU",
+    ],
     accent: 0x5f9bff, art: [
       { file: "fifam-angles.webp", cap: "FRONT-END FEATURES" },
       { file: "fcm-gameplay.webp", cap: "LIVE CONTENT" },
     ],
   },
   {
-    org: "EA MAXIS", sub: "THE SIMS: TOWN STORIES", when: "2024 — 2026",
+    org: "EA MAXIS", role: "GAME DESIGNER · THE SIMS: TOWN STORIES", when: "2024 — 2026",
     line: "FTUE, quests and event loops · AMP, Unity, C#",
+    duties: [
+      "FTUE, quests and event loops",
+      "Event logic in AMP; tools in Unity C#",
+      "Technical design docs in Jira / Confluence",
+    ],
     accent: 0x56d06d, art: [
       { file: "sims-cover.webp", cap: "TOWN STORIES" },
       { file: "sims-store-1.webp", cap: "EVENT LOOPS" },
@@ -67,8 +92,13 @@ export const STANDS = [
     ],
   },
   {
-    org: "GHOST FOX GAMES", sub: "GAME DIRECTOR · COSMIC CARNAGE", when: "2026 —",
+    org: "GHOST FOX GAMES", role: "CO-FOUNDER / GAME DIRECTOR · COSMIC CARNAGE", when: "2026 —",
     line: "Seven EA veterans · Roblox Incubator 2026",
+    duties: [
+      "PvP vehicular combat and weapon systems",
+      "NPC AI — pathing, targeting, threat",
+      "Match structure and system documentation",
+    ],
     accent: 0xff5f8f, grand: true, art: [
       { file: "cosmic-carnage-keyart.webp", cap: "COSMIC CARNAGE" },
       { file: "gfg-logo.webp", cap: "GHOST FOX GAMES" },
@@ -112,8 +142,59 @@ const barrierTex = (s) => canvasTex(2048, 256, (g, c) => {
   g.fillText(s.org, c.width / 2, 130);
   g.fillStyle = "rgba(244,241,250,.66)";
   g.font = '500 32px "IBM Plex Mono", monospace';
-  g.fillText(s.sub, c.width / 2, 202);
+  g.fillText(s.role, c.width / 2, 202);
 });
+
+// The duty board: what the job actually was. Hung on the band beside the key art, so a stand with
+// no shipped art to show still has something on its wall.
+const dutyTex = (s, big) => canvasTex(1024, big ? 512 : 720, (g, c) => {
+  g.fillStyle = "#080a11";
+  g.fillRect(0, 0, c.width, c.height);
+  g.fillStyle = hex(s.accent);
+  g.fillRect(0, 0, c.width, 8);
+  g.fillRect(0, c.height - 8, c.width, 8);
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+
+  g.fillStyle = hex(s.accent);
+  g.font = `600 ${big ? 40 : 46}px "IBM Plex Mono", monospace`;
+  g.fillText("RESPONSIBILITIES", c.width / 2, big ? 66 : 82);
+
+  // The role repeats here on purpose: the barrier carrying it is eleven metres off the ground and
+  // ninety behind you by the time you are looking up at this.
+  g.fillStyle = "#f4f1fa";
+  g.font = `400 ${big ? 34 : 40}px Silkscreen, "IBM Plex Mono", monospace`;
+  wrap(g, s.role, c.width - 90, c.width / 2, big ? 124 : 158, big ? 44 : 52);
+
+  g.textAlign = "left";
+  g.fillStyle = "rgba(244,241,250,.82)";
+  const size = big ? 36 : 44;
+  g.font = `500 ${size}px "IBM Plex Mono", monospace`;
+  let y = big ? 228 : 320;
+  for (const d of s.duties) {
+    g.fillStyle = hex(s.accent);
+    g.fillText("\u25b8", 54, y);
+    g.fillStyle = "rgba(244,241,250,.82)";
+    y = wrap(g, d, c.width - 140, 104, y, size * 1.24) + size * 1.5;
+  }
+});
+
+// Very small word wrapper — enough for three short lines of duty text and a job title.
+function wrap(g, text, maxWidth, x, y, lineHeight) {
+  const words = String(text).split(" ");
+  let line = "";
+  let cy = y;
+  for (const w of words) {
+    const test = line ? `${line} ${w}` : w;
+    if (g.measureText(test).width > maxWidth && line) {
+      g.fillText(line, x, cy);
+      cy += lineHeight;
+      line = w;
+    } else line = test;
+  }
+  if (line) g.fillText(line, x, cy);
+  return cy;
+}
 
 // The headline on the upper tier, readable from right across the arena.
 const crownTex = (s) => canvasTex(2048, 192, (g, c) => {
@@ -316,24 +397,41 @@ export function buildColosseum(scene) {
     // and the headline up on the parapet, clear of the art, readable from the far side
     panel(crownTex(s), 124, 12, mid, artR + 9.4, ART_TOP + 6.5, { transparent: true });
 
-    // key art, spread across the wedge. The grand stand gets the middle of its own arc.
-    const n = s.art.length;
-    s.art.forEach((a, k) => {
-      const spread = s.grand ? 0.30 : 0.26;
-      const off = n === 1 ? 0 : (k / (n - 1) - 0.5) * 2 * spread * WEDGE;
-      const w = s.grand ? 54 : 48;
+    // The band is laid out as one row of boards: every piece of key art, then the duty board,
+    // measured in metres of arc and converted to angle at the end. Spacing them by arc length
+    // rather than by a fraction of the wedge is what keeps a stand with one board and a stand
+    // with four looking like they belong to the same building.
+    const boards = [...s.art.map((a) => ({ art: a })), { duty: true }];
+    const artW = s.art.length >= 3 ? 62 : 70;
+    const dutyW = s.art.length ? 44 : 104;      // an empty wall gets a much bigger board
+    const widths = boards.map((bd) => (bd.duty ? dutyW : artW));
+    const GAP = 11;
+    const span = widths.reduce((t, w) => t + w, 0) + GAP * (boards.length - 1);
+    const artH = artW * 9 / 16;
+    const midY = ART_BOTTOM + 7 + artH / 2;
+
+    let cursor = -span / 2;
+    boards.forEach((bd, k) => {
+      const w = widths[k];
+      const off = (cursor + w / 2) / artR;      // arc length to radians
+      cursor += w + GAP;
+
+      if (bd.duty) {
+        const h = s.art.length ? artH : artH * 1.12;
+        panel(dutyTex(s, !!s.art.length), w, h, mid + off, artR, midY);
+        return;
+      }
       const h = w * 9 / 16;
-      const y = ART_BOTTOM + 6 + h / 2;
-      const art = panel(null, w, h, mid + off, artR, y);
-      art.material.color.setHex(0x1d2130);        // a plate until the image lands
-      loader.load(ART + a.file, (tex) => {
+      const art = panel(null, w, h, mid + off, artR, midY);
+      art.material.color.setHex(0x1d2130);      // a plate until the image lands
+      loader.load(ART + bd.art.file, (tex) => {
         tex.colorSpace = THREE.SRGBColorSpace;
         tex.anisotropy = 4;
         art.material.map = tex;
         art.material.color.setHex(0xffffff);
         art.material.needsUpdate = true;
       });
-      panel(captionTex(a.cap, s.accent), w, 3.4, mid + off, artR, y - h / 2 - 2.6);
+      panel(captionTex(bd.art.cap, s.accent), w, 4.2, mid + off, artR, midY - h / 2 - 3.2);
     });
   });
 

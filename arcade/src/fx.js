@@ -360,6 +360,20 @@ export function createFx(scene) {
       });
     },
 
+    // One lick of afterburner, for anything with a pipe that is not the player. Same shape as
+    // dust(): the caller knows where its own exhaust is, this owns what a flame looks like.
+    jet(x, y, z, vx, vy, vz, scale = 1) {
+      spot.set(x, y, z);
+      eject.set(vx + rand(-1.2, 1.2), vy + rand(-0.3, 1.2), vz + rand(-1.2, 1.2));
+      const core = Math.random() < 0.3;
+      flCursor = emit(flames, flCursor, spot, eject, {
+        life: rand(0.11, 0.24) * scale,
+        size: (core ? 0.26 : 0.38) * scale,
+        grow: (core ? -0.12 : 0.26) * scale,
+        col: core ? FLAME_CORE : FLAME_MID, col2: FLAME_TAIL,
+      });
+    },
+
     // onPickup(value) is called once per diamond collected
     update(dt, player, pickupRadius, onPickup) {
       // debris: ballistic, tumbling, fading to black

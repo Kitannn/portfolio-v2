@@ -3,6 +3,7 @@
 import { CARDS, RARITY } from "./cards.js";
 import { MASTERY, TIERS, VEHICLES, nextCost, refundValue, tierUnlocked, levelsToUnlock, totalLevels } from "./shop.js";
 import * as store from "./save.js";
+import * as ach from "./achievements.js";
 import { displayName } from "./name.js";
 import { esc, fmtTime } from "./util.js";
 
@@ -286,6 +287,55 @@ export function createMenus(host, { onClose, onVehicle } = {}) {
     refresh = board;
   }
 
+  // ---- Achievements ---------------------------------------------------------------
+  // Grouped by tier rather than by done/not-done, so the shape of what is left to do is visible
+  // at a glance. A hidden one that has not landed yet shows as a locked slot with no name: the
+  // count is honest about how many there are without saying what any of them is.
+  function achievements() {
+    const s = store.save();
+    const rows = ach.roster(s);
+    const have = rows.filter((r) => r.done).length;
+
+    const byTier = {};
+    for (const r of rows) (byTier[r.def.tier] ||= []).push(r);
+
+    open();
+    host.innerHTML = shell("Achievements", `${have} of ${rows.length} earned`, `
+      <div class="ach-scroll">
+        ${Object.keys(ach.TIERS).map((tier) => {
+          const list = byTier[tier] || [];
+          if (!list.length) return "";
+          const n = list.filter((r) => r.done).length;
+          return `
+          <section class="ach-tier" style="--t: var(${ach.TIERS[tier].color})">
+            <p class="ach-head">${ach.TIERS[tier].label}<i>${n}/${list.length}</i></p>
+            <div class="ach-grid">
+              ${list.map((r) => r.secret ? `
+                <div class="ach ach-secret" aria-label="Hidden achievement">
+                  <b>???????</b>
+                  <span>A hidden achievement. Keep driving.</span>
+                  <em class="ach-reward">Reward hidden</em>
+                </div>` : `
+                <div class="ach ${r.done ? "on" : ""}">
+                  <b>${esc(r.def.name)}${r.def.hidden ? `<i class="ach-hid">Hidden</i>` : ""}</b>
+                  <span>${esc(r.def.desc)}</span>
+                  <p class="ach-bar"><i style="width:${(r.pct * 100).toFixed(1)}%"></i></p>
+                  <p class="ach-meter">${r.done ? "Earned" : `${fmtGoal(r.value)} / ${fmtGoal(r.goal)}`}</p>
+                  <em class="ach-reward">${esc(ach.rewardText(r.def)) || "\u2014"}</em>
+                </div>`).join("")}
+            </div>
+          </section>`;
+        }).join("")}
+      </div>
+      <p class="ach-note">Credit rewards are paid the moment an achievement lands. The other rewards
+        are permanent and apply to every run from then on \u2014 they stack with Shop mastery.</p>`,
+      `<p class="panel-progress-n">${have}/${rows.length}</p>`);
+    refresh = achievements;
+  }
+
+  // 50000 reads badly on a progress line; 50,000 does
+  const fmtGoal = (n) => (n >= 10000 ? `${Math.round(n / 1000)}k` : n.toLocaleString());
+
   // ---- Reset progress -------------------------------------------------------------
   function resetAll(afterWipe) {
     const s = store.save();
@@ -299,6 +349,7 @@ export function createMenus(host, { onClose, onVehicle } = {}) {
           <li>Your <b>Collection</b> — ${Object.keys(s.discovered || {}).length} discovered cards forgotten</li>
           <li><b>Vehicles</b> back to the starting GR 86</li>
           <li>All <b>records</b> — ${s.runs || 0} runs, ${s.deaths || 0} deaths, every leaderboard entry</li>
+          <li>Every <b>achievement</b> — ${ach.earned(s)}/${ach.total()} earned, and the permanent bonuses they grant</li>
           <li>Your <b>player name</b></li>
         </ul>
         <p class="confirm-note">Cheat codes found on the portfolio are not stored here and stay unlocked.</p>`,
@@ -317,6 +368,7 @@ export function createMenus(host, { onClose, onVehicle } = {}) {
       else if (which === "collection") collection();
       else if (which === "shop") shop();
       else if (which === "board") board();
+      else if (which === "achievements") achievements();
     },
     refresh: () => refresh?.(),
   };

@@ -367,7 +367,7 @@ export function createEnemies(scene, fx, hooks = {}) {
         let z = player.pos.z + Math.sin(a) * r;
         // keep spawns inside the arena, or a wave can appear behind the fence
         const d = Math.hypot(x, z);
-        if (d > ARENA - 8) { x *= (ARENA - 8) / d; z *= (ARENA - 8) / d; }
+        if (d > ARENA - 14) { x *= (ARENA - 14) / d; z *= (ARENA - 14) / d; }   // never spawn in the wall
 
         // the first slot of a flagged wave is the elite
         const elite = withElite && i === 0;
@@ -449,9 +449,12 @@ export function createEnemies(scene, fx, hooks = {}) {
           }
         }
 
-        // stay inside the fence
+        // Stay inside the barrier. By its own RADIUS, not its centre point: an elite is three
+        // times scale, so a clamp that only kept the middle of it inside left the rest of it
+        // sticking through the grandstand.
         const rr = Math.hypot(e.pos.x, e.pos.z);
-        if (rr > ARENA - 3) { e.pos.x *= (ARENA - 3) / rr; e.pos.z *= (ARENA - 3) / rr; }
+        const lim = ARENA - 3 - e.radius;
+        if (rr > lim) { e.pos.x *= lim / rr; e.pos.z *= lim / rr; }
 
         // --- tyre smoke ---
         // Anything with wheels leaves a trail, so the field reads as traffic rather than as shapes

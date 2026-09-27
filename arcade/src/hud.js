@@ -48,6 +48,8 @@ export function createHud(root, { onFreeLook, onPause } = {}) {
       <i class="cam-icon"></i><span data-k="camlabel">Chase</span><em>L CTRL</em>
     </button>
 
+    <div class="hud-speed" data-k="speed" aria-hidden="true"><i></i><i></i></div>
+
     <div class="hud-toast" data-k="toast" hidden><b data-k="toasthead"></b><span data-k="toastbody"></span></div>
 
     <div class="hud-hint">WASD drive · SHIFT boost · SPACE handbrake · CLICK fire · R reload · L CTRL free look</div>
@@ -74,6 +76,7 @@ export function createHud(root, { onFreeLook, onPause } = {}) {
   let lastTime = -1, lastMag = -1, lastKills = -1, lastAcc = -1, lastLevel = -1, lastWord = "";
   let lastBossState = "";
   let lastFree = null;
+  let lastBoost = null;
 
   k.cam.addEventListener("click", () => onFreeLook?.());
   k.pause.addEventListener("click", () => onPause?.());
@@ -95,7 +98,10 @@ export function createHud(root, { onFreeLook, onPause } = {}) {
 
   return {
     root,
-    show: (on) => { root.hidden = !on; if (!on) { k.toast.hidden = true; toastLeft = 0; } },
+    show: (on) => {
+      root.hidden = !on;
+      if (!on) { k.toast.hidden = true; toastLeft = 0; k.speed.classList.remove("on"); lastBoost = false; }
+    },
 
     // called on damage so the screen edge pulses red
     hurt(amount) { flashLeft = Math.min(1, flashLeft + clamp(amount / 30, 0.25, 1)); },
@@ -139,6 +145,13 @@ export function createHud(root, { onFreeLook, onPause } = {}) {
       }
       const p = s.infiniteBelt ? 1 : s.reloading ? s.reloadProgress : s.mag / Math.max(1, s.magCap);
       ring.style.strokeDashoffset = `${RING * (1 - clamp(p, 0, 1))}`;
+
+      // Speed lines. Only flipped when the state actually changes — this runs every frame, and
+      // writing a class on every one of them would defeat the CSS transition that does the work.
+      if (!!s.boosting !== lastBoost) {
+        k.speed.classList.toggle("on", !!s.boosting);
+        lastBoost = !!s.boosting;
+      }
 
       if (s.freeLook !== lastFree) {
         k.cam.classList.toggle("on", s.freeLook);

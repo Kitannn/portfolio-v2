@@ -736,3 +736,99 @@ body.is-touch .hud-boss { left: 128px; right: 246px; width: auto; transform: non
 .name-field:has(input:placeholder-shown) .name-ghost b { opacity: 0; }
 .name-ghost i { font-style: normal; color: transparent; }
 .name-ghost b { font-weight: 400; color: rgba(124, 198, 255, .6); }
+
+/* ---------- speed lines on the boost ---------- */
+/* Two counter-rotating fans of radial streaks, masked away from the middle of the screen so they
+   never sit on top of the car or the crosshair — all the motion happens in the periphery, which is
+   where peripheral vision reads speed from anyway. The scale animation is what makes them rush:
+   the streaks are static, the whole fan grows past the edge of the frame. */
+.hud-speed {
+  position: absolute; inset: -12%; pointer-events: none;
+  opacity: 0; transition: opacity .22s ease;
+}
+.hud-speed.on { opacity: 1; }
+.hud-speed i {
+  position: absolute; inset: 0; display: block;
+  background: repeating-conic-gradient(from 0deg at 50% 50%,
+    transparent 0 1.1deg, rgba(255, 255, 255, .55) 1.1deg 1.5deg, transparent 1.5deg 3.4deg);
+  -webkit-mask-image: radial-gradient(ellipse 46% 40% at 50% 50%, transparent 48%, #000 96%);
+  mask-image: radial-gradient(ellipse 46% 40% at 50% 50%, transparent 48%, #000 96%);
+  will-change: transform, opacity;
+}
+.hud-speed.on i { animation: speedRush .62s linear infinite; }
+.hud-speed i:nth-child(2) {
+  background: repeating-conic-gradient(from 12deg at 50% 50%,
+    transparent 0 2.2deg, rgba(255, 201, 74, .42) 2.2deg 2.7deg, transparent 2.7deg 6.5deg);
+  animation-duration: .42s;
+  animation-delay: -.2s;
+}
+@keyframes speedRush {
+  from { transform: scale(.72); opacity: 0; }
+  30%  { opacity: 1; }
+  to   { transform: scale(1.9); opacity: 0; }
+}
+/* and a warm wash at the edges, so the boost is felt as well as seen */
+.hud-speed::after {
+  content: ""; position: absolute; inset: 0;
+  background: radial-gradient(ellipse 58% 52% at 50% 50%, transparent 52%, rgba(255, 140, 60, .22));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-speed.on i { animation: none; transform: scale(1.3); opacity: .5; }
+}
+
+/* ---------- achievements ---------- */
+:root {
+  --t-bronze: #c88a52;
+  --t-silver: #b9c2d4;
+  --t-gold: #ffc94a;
+  --t-plat: #7cc6ff;
+  --t-myth: #ff5f8f;
+}
+.ach-scroll { display: grid; gap: 24px; }
+.ach-tier { display: grid; gap: 9px; }
+.ach-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 10px; letter-spacing: .26em; text-transform: uppercase; color: var(--t); }
+.ach-head i { font-style: normal; color: var(--muted); }
+.ach-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 9px; }
+.ach {
+  position: relative; display: grid; gap: 6px; padding: 13px 14px 15px;
+  border: 1px solid var(--line); background: rgba(14, 13, 20, .8);
+  border-left: 3px solid color-mix(in srgb, var(--t) 45%, transparent);
+}
+.ach.on { border-color: color-mix(in srgb, var(--t) 50%, transparent); border-left-color: var(--t); background: color-mix(in srgb, var(--t) 8%, rgba(14, 13, 20, .8)); }
+.ach b { font-size: 13px; color: var(--fg); display: flex; align-items: center; gap: 8px; }
+.ach.on b { color: var(--t); }
+.ach span { font-size: 11px; line-height: 1.5; color: var(--muted); letter-spacing: 0; }
+.ach-hid { font-style: normal; font-size: 8px; letter-spacing: .14em; text-transform: uppercase; padding: 1px 5px; color: #07070c; background: var(--muted); }
+.ach-bar { height: 3px; background: rgba(238, 234, 245, .12); overflow: hidden; }
+.ach-bar i { display: block; height: 100%; background: var(--t); box-shadow: 0 0 8px var(--t); }
+.ach.on .ach-bar i { width: 100% !important; }
+.ach-meter { font-family: "Silkscreen", monospace; font-size: 10px; letter-spacing: .04em; color: var(--muted); }
+.ach.on .ach-meter { color: var(--t); }
+.ach-reward { font-style: normal; font-size: 10px; letter-spacing: .02em; color: var(--yolk); }
+/* a hidden achievement gives away its existence and nothing else */
+.ach-secret { opacity: .5; border-left-color: rgba(238, 234, 245, .18); }
+.ach-secret b { color: rgba(238, 234, 245, .4); letter-spacing: .18em; }
+.ach-secret .ach-reward { color: rgba(238, 234, 245, .3); }
+.ach-note { font-size: 11px; line-height: 1.65; color: var(--muted); letter-spacing: 0; max-width: 72ch; }
+.panel-progress-n { font-family: "Silkscreen", monospace; font-size: 15px; color: var(--t-gold); letter-spacing: .05em; }
+
+/* the finish screen calls out anything that just landed */
+.fin-ach { width: 100%; margin-top: 24px; display: grid; gap: 7px; }
+.fin-ach-row {
+  display: grid; gap: 3px; padding: 11px 14px; text-align: left;
+  border: 1px solid color-mix(in srgb, var(--t) 45%, transparent);
+  background: color-mix(in srgb, var(--t) 10%, transparent);
+  animation: achIn .5s cubic-bezier(.2, .9, .3, 1.1) both;
+}
+.fin-ach-row:nth-child(3) { animation-delay: .1s; }
+.fin-ach-row:nth-child(4) { animation-delay: .2s; }
+@keyframes achIn { from { opacity: 0; transform: translateY(10px); } }
+.fin-ach-row b { font-size: 13px; color: var(--t); }
+.fin-ach-row span { font-size: 11px; line-height: 1.5; color: var(--muted); letter-spacing: 0; }
+.fin-ach-row em { font-style: normal; font-size: 10px; color: var(--yolk); }
+.fin-bonus { font-style: normal; font-size: 11px; color: var(--plumb); margin-left: 8px; }
+
+@media (max-width: 720px) {
+  .ach-grid { grid-template-columns: 1fr; }
+}

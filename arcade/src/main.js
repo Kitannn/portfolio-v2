@@ -20,6 +20,7 @@ import { askName, displayName } from "./name.js";
 import { applyMastery } from "./shop.js";
 import * as store from "./save.js";
 import * as cheats from "./cheats.js";
+import * as ach from "./achievements.js";
 import { clamp, damp, esc } from "./util.js";
 
 const $ = (id) => document.getElementById(id);
@@ -91,13 +92,17 @@ store.initSave();
 
 // A run's stats are always rebuilt from scratch: base -> permanent mastery -> this run's cards.
 // Nothing is ever mutated in place, so a stat can never drift out of sync with what earned it.
-const buildStats = (taken) => applyAll(taken, applyMastery(cheats.applyCheats(baseStats()), store.masteryFor()));
+const buildStats = (taken) =>
+  applyAll(taken, ach.applyAchievements(applyMastery(cheats.applyCheats(baseStats()), store.masteryFor()), store.save()));
 
 const run = {
   taken: {},            // cardId -> times taken
   stats: buildStats({}),
   xp: 0, level: 1, xpNeeded: 100,
   kills: 0, elapsed: 0, pendingCards: 0,
+  // what this run is worth to the achievement counters
+  flora: 0, chests: 0, elites: 0, cardsTaken: 0, distance: 0,
+  hitsTaken: 0, safeSince: 0, safeStreak: 0, quiet: 0,
   luckyCards: 0,        // chest picks, drawn from a luckier table than a level-up
   chestCredits: 0,      // found in the world, paid out with the rest at the end
   credits: 0,           // banked across runs this session; persistence lands with the shop
@@ -115,22 +120,35 @@ const hud = createHud($("hud"), {
 const chase = createChaseCam(camera);
 const fx = createFx(scene);
 const subs = createSubWeapons(scene, fx);
+// A hit ends the untouched streak, and the longest one in the run is what gets recorded. An
+// invulnerable run does not count as being hit, because nothing actually connected.
+const takeHit = (n) => {
+  hud.hurt(n);
+  if (player.invulnerable) return;
+  run.hitsTaken++;
+  run.safeStreak = Math.max(run.safeStreak, run.elapsed - run.safeSince);
+  run.safeSince = run.elapsed;
+};
+
 const foes = createEnemies(scene, fx, {
-  onPlayerHit: (n) => hud.hurt(n),
+  onPlayerHit: takeHit,
   onShake: (n) => chase.shake(n),
   onElite: () => { note("Elite inbound", 3); chase.shake(0.35); },
-  onEliteDown: (at) => { note("Elite down — chest dropped", 3.5); scatter.dropCardChest(at); chase.shake(0.7); },
+  onEliteDown: (at) => { run.elites++; note("Elite down — chest dropped", 3.5); scatter.dropCardChest(at); chase.shake(0.7); },
 });
 
 // The scatter needs the level-up machinery, so its hooks are set after those exist (below).
 const scatter = createScatter(scene, fx, {
+  onFlora: () => { run.flora++; },
   onCreditChest: (value) => {
+    run.chests++;
     run.chestCredits += value;
     hud.toast("CHEST", `◆ ${value} CREDITS`, 2.6, "gold");
     chase.shake(0.25);
   },
   onCardChest: () => {
     // an elite's chest is a free pick, weighted toward the good end
+    run.chests++;
     run.pendingCards++;
     run.luckyCards++;
     hud.toast("CHEST", "FREE UPGRADE", 2.6, "epic");
@@ -141,7 +159,7 @@ let weakNote = "";         // the line under the boss bar: weak points, elites, 
 let weakNoteIn = 0;
 const note = (text, secs = 3) => { weakNote = text; weakNoteIn = secs; };
 const boss = createBoss(scene, fx, {
-  onPlayerHit: (n) => hud.hurt(n),
+  onPlayerHit: takeHit,
   onShake: (n) => chase.shake(n),
   onBossShot: (from, player, dmg) => foes.fireAt(from, player, dmg),
   // the Colossus is the only thing worth shooting: the field is cleared and the tap shut off
@@ -455,6 +473,20 @@ function endRun(won) {
     accuracy: weapon.accuracy(),
     taken: { ...run.taken },
     credits: 0,
+
+    // what this run contributes to the lifetime counters
+    flora: run.flora,
+    chests: run.chests,
+    elites: run.elites,
+    cardsTaken: run.cardsTaken,
+    distance: run.distance,
+    // Accuracy only counts from a run that actually fired enough to mean something — three
+    // lucky shots is not marksmanship.
+    ratedAccuracy: weapon.fired >= 300 ? Math.round(weapon.accuracy() * 100) : 0,
+    safeStreak: Math.max(run.safeStreak, run.elapsed - run.safeSince),
+    quiet: run.quiet,
+    flawless: won && run.hitsTaken === 0 && !run.invulnerable,
+    fastBoss: won && run.elapsed - BOSS_AT <= 30,
   };
   result.credits = Math.round((creditsFor(result) + run.chestCredits) * (run.stats.creditMult || 1));
   // A last look at the numbers before they are banked. These bounds are far outside anything the
@@ -469,6 +501,14 @@ function endRun(won) {
   ) store.flagTamper("run values out of range");
   result.hacked = store.isTampered();
   store.recordRun(result);
+
+  // Achievements are settled after the run is banked, so they see the counters this run just
+  // moved. Credits are paid here — achievements.js deliberately never touches the wallet.
+  result.unlocked = ach.evaluate(store.save());
+  const payout = result.unlocked.reduce((n, a) => n + (a.credits || 0), 0);
+  if (payout) store.save().credits += payout;
+  if (result.unlocked.length) store.flush();
+  result.achCredits = payout;
   hud.show(false);
   touch.show(false);
   input.releaseMouse?.(true);         // there are buttons on the finish screen
@@ -498,6 +538,8 @@ function startRun() {
   run.xp = 0; run.level = 1; run.xpNeeded = 100;
   run.kills = 0; run.elapsed = 0; run.pendingCards = 0;
   run.luckyCards = 0; run.chestCredits = 0; run.invulnerable = false;
+  run.flora = 0; run.chests = 0; run.elites = 0; run.cardsTaken = 0; run.distance = 0;
+  run.hitsTaken = 0; run.safeSince = 0; run.safeStreak = 0; run.quiet = 0;
   player.car.root.visible = true;
   pause.close();
 
@@ -544,6 +586,7 @@ function gainXp(value) {
 
 // Take a card: record it, rebuild the stat block from scratch, then let the card do its one-off.
 export function takeCard(card) {
+  run.cardsTaken++;
   run.taken[card.id] = (run.taken[card.id] || 0) + 1;
   store.discover(card.id);
   run.stats = buildStats(run.taken);
@@ -599,6 +642,8 @@ function frame(now) {
     // the pause after a card is spent standing still, so the pick has a beat to land
     if (unfreezeIn > 0) { unfreezeIn = Math.max(0, unfreezeIn - dt); dt = 0; }
     run.elapsed += dt;
+    run.distance += Math.abs(player.speed) * dt;
+    if (weapon.fired === 0) run.quiet = run.elapsed;     // how long before the first shot
     player.update(dt, input);
     updateAim();
     foes.update(dt, run.elapsed, player, run.stats, camera);
@@ -626,6 +671,7 @@ function frame(now) {
       reloadProgress: weapon.reloadProgress(), infiniteBelt: run.stats.infiniteBelt,
       fired: weapon.fired, accuracy: weapon.accuracy(),
       freeLook: input.freeLook,
+      boosting: player.boosting,
       boss: {
         show: true,
         active: boss.active,

@@ -3,6 +3,8 @@
 // Nothing is written to disk until the player says yes. Until then — and forever, if they say no —
 // the same object lives in memory for the session, so every menu works identically either way and
 // no code outside this file needs to care which mode it is in.
+import { freshTotals } from "./achievements.js";
+
 const KEY = "hkitandrun.save.v1";
 const CONSENT_KEY = "hkitandrun.consent";
 
@@ -23,6 +25,8 @@ const fresh = () => ({
   vehicle: "gr86",
   discovered: {},     // cardId -> true, for the Collection
   mastery: {},        // vehicleId -> { nodeId: level } — mastery is bought per vehicle
+  ach: {},            // achievementId -> 1, once earned
+  totals: freshTotals(),   // the lifetime counters achievements are measured against
 });
 
 let data = fresh();
@@ -42,6 +46,7 @@ function signature(d) {
     d.bestTime | 0, d.bestKills | 0,
     Object.keys(d.discovered || {}).sort(),
     d.mastery || {}, d.name || "", d.tag || "", d.vehicle || "",
+    Object.keys(d.ach || {}).sort(), d.totals || {},
     (d.history || []).map((h) => [h.at | 0, h.t | 0, h.kills | 0, h.damage | 0, h.level | 0]),
   ]);
   // two independent 32-bit walks, so a single-field edit cannot be cancelled out by another
@@ -87,6 +92,7 @@ export function initSave() {
       const raw = readRaw(KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
+        parsed.totals = { ...freshTotals(), ...(parsed.totals || {}) };
         const sig = parsed.sig;
         delete parsed.sig;
         data = migrate({ ...fresh(), ...parsed });
@@ -135,6 +141,23 @@ export function recordRun(result) {
   data.bestKills = Math.max(data.bestKills, result.kills);
   if (result.won) data.bossKills++; else data.deaths++;
   for (const id of Object.keys(result.taken)) data.discovered[id] = true;
+
+  // Lifetime counters. Sums accumulate; bests take the higher of the two. Accuracy only counts
+  // from a run long enough to mean something, which is why the caller passes it pre-filtered.
+  const t = (data.totals = { ...freshTotals(), ...(data.totals || {}) });
+  t.kills += result.kills;
+  t.flora += result.flora || 0;
+  t.chests += result.chests || 0;
+  t.elites += result.elites || 0;
+  t.cards += result.cardsTaken || 0;
+  t.distance += Math.round(result.distance || 0);
+  t.bestLevel = Math.max(t.bestLevel, result.level);
+  t.bestAccuracy = Math.max(t.bestAccuracy, result.ratedAccuracy || 0);
+  t.bestSafeStreak = Math.max(t.bestSafeStreak, Math.floor(result.safeStreak || 0));
+  t.bestQuiet = Math.max(t.bestQuiet, Math.floor(result.quiet || 0));
+  t.bestCardsInRun = Math.max(t.bestCardsInRun, result.cardsTaken || 0);
+  if (result.flawless) t.flawless = 1;
+  if (result.fastBoss) t.fastBoss = 1;
 
   data.history = data.history || [];
   data.history.unshift({
