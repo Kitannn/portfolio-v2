@@ -2,7 +2,7 @@
 // Hidden page: nothing on kitannn.com links here.
 import * as THREE from "three";
 import { buildWorld } from "./world.js";
-import { buildRoute } from "./route.js";
+import { buildColosseum } from "./colosseum.js";
 import { createPlayer, createChaseCam } from "./player.js";
 import { attachInput, input } from "./input.js";
 import { createTouch, looksLikeTouch } from "./touch.js";
@@ -105,7 +105,7 @@ const run = {
 const getStats = () => run.stats;
 
 const world = buildWorld(scene);
-const route = buildRoute(scene);
+const colosseum = buildColosseum(scene);
 const player = createPlayer(scene, getStats);
 const weapon = createWeapon(scene, player.car, getStats);
 const hud = createHud($("hud"), {
@@ -384,12 +384,26 @@ const levelUp = createLevelUp($("modalHost"), {
 const finish = createFinish($("modalHost"), {
   onRetry: () => startRun(),
   onMenu: () => {
+    parkCar();
     refreshCredits();
     titleScreen.hidden = false;
     titleScreen.classList.add("fade-in");
     state = STATE.TITLE;
   },
 });
+
+// Going back to the title. The idle camera orbits the origin, so the car has to actually BE
+// there — left alone it stays wherever the run ended, and after a wreck it is invisible too, so
+// the menu came up over an empty patch of floor.
+function parkCar() {
+  player.reset();
+  // reset() moves the player's own state; the mesh only follows it inside update(), which does not
+  // run at the title — so the transform has to be written here or the car stays where it died.
+  player.car.root.visible = true;
+  player.car.root.position.set(0, 0, 0);
+  player.car.root.rotation.y = 0;
+  chase.snap(player);
+}
 
 function togglePause() {
   if (state === STATE.PLAYING) {
@@ -419,6 +433,7 @@ const pause = createPause($("pauseHost"), {
     input.releaseMouse?.(true);
     input.setFreeLook?.(false);       // the menus are a cursor place; the next run starts in chase
     levelUp.close();
+    parkCar();
     refreshCredits();
     titleScreen.hidden = false;
     titleScreen.classList.add("fade-in");
@@ -629,7 +644,7 @@ function frame(now) {
   }
 
   world.update(dt, elapsed, camera, player.pos);
-  route.update(dt, elapsed, camera);
+  colosseum.update(dt, elapsed, camera);
   renderer.render(scene, camera);
 }
 

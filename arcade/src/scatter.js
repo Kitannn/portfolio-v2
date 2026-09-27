@@ -13,8 +13,8 @@ const CHESTS = 18;
 const CREDIT_CHEST_CHANCE = 0.055;   // share of flora slots that are a chest instead
 const REGROW = 26;                   // seconds before a cleared patch comes back
 
-// Ground stencils only. The work history itself now lives along the route (see route.js) — these
-// are the offcuts, sprayed on the tarmac between the districts the way a real site gets marked up.
+// Ground stencils only. The work history itself lives on the stands (see colosseum.js) — these are
+// the offcuts, sprayed across the floor the way a real arena gets marked up between events.
 const MARKS = [
   { text: "PLUMBROOK", sub: "EA MAXIS" },
   { text: "TOWN STORIES", sub: "THE SIMS" },

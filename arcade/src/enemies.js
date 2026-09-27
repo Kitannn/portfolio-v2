@@ -38,10 +38,24 @@ const TELEGRAPH_FROM = Infinity;
 const TELEGRAPH_LEAD = 0.62; // how long the line shows before the shot
 const TELEGRAPH_HOT = 0.22;  // …and how long it burns red at the end
 
+// `hull` and `plate` are what the body is painted; `colour` is the lit accent and what the wreck
+// explodes in. The plain is near-black and lit in cyan and green, so the opposition is painted in
+// warm colours that nothing else in the world uses — they used to share one dark grey-blue hull
+// and read as three identical silhouettes against a dark floor.
 const TYPES = {
-  jeep:  { speed: 13, turn: 1.4, range: 24, spacing: 3.4, fire: 4.4, radius: 1.7, hpMult: 1.6, y: 0.0,  xp: 1.0, contact: 12, colour: 0xff5a3c },
-  bike:  { speed: 19, turn: 2.2, range: 13, spacing: 2.4, fire: 3.4, radius: 1.1, hpMult: 0.7, y: 0.0,  xp: 1.0, contact: 8,  colour: 0xff3f6e },
-  drone: { speed: 11, turn: 1.9, range: 20, spacing: 3.0, fire: 3.8, radius: 1.4, hpMult: 1.0, y: 2.1,  xp: 1.2, contact: 7,  colour: 0xff8a3c },
+  jeep:  { speed: 13, turn: 1.4, range: 24, spacing: 3.4, fire: 4.4, radius: 1.7, hpMult: 1.6, y: 0.0,  xp: 1.0, contact: 12,
+           colour: 0xffb04a, hull: 0xc0543a, plate: 0x51291d },
+  bike:  { speed: 19, turn: 2.2, range: 13, spacing: 2.4, fire: 3.4, radius: 1.1, hpMult: 0.7, y: 0.0,  xp: 1.0, contact: 8,
+           colour: 0xff8ab4, hull: 0xcf3f6c, plate: 0x4d1e2f },
+  drone: { speed: 11, turn: 1.9, range: 20, spacing: 3.0, fire: 3.8, radius: 1.4, hpMult: 1.0, y: 2.1,  xp: 1.2, contact: 7,
+           colour: 0xffe89a, hull: 0xd79a3a, plate: 0x4c371b },
+};
+
+// Where a type's driven wheels meet the ground, in its own model space — what its smoke comes off.
+// A bike has one back wheel, a jeep has two, and a drone does not touch the ground at all.
+const REAR_AXLE = {
+  jeep: { z: -0.98, xs: [-0.86, 0.86] },
+  bike: { z: -0.92, xs: [0] },
 };
 const TYPE_KEYS = Object.keys(TYPES);
 const POOL_PER_TYPE = 26;
@@ -49,9 +63,16 @@ const MAX_SHOTS = 420;
 const MAX_TELEGRAPHS = 64;
 
 // ---- materials ----------------------------------------------------------------
-const hullMat = () => new THREE.MeshStandardMaterial({ color: 0x2b2f3a, roughness: 0.62, metalness: 0.7, flatShading: true });
-const plateMat = () => new THREE.MeshStandardMaterial({ color: 0x14161d, roughness: 0.9, metalness: 0.3, flatShading: true });
-const glowMat = (c) => new THREE.MeshStandardMaterial({ color: 0x000000, emissive: c, emissiveIntensity: 2.6, roughness: 1, toneMapped: true });
+// Metalness is the trap here: a metal surface is lit almost entirely by the environment map, and
+// this environment is a dark sky, so the old 0.7 made every panel a mirror of nothing. Low metal,
+// mid roughness and a trace of self-illumination keeps a shape readable even with its back to the
+// key light, which out here is most of the time.
+const hullMat = (c) => new THREE.MeshStandardMaterial({
+  color: c, roughness: 0.55, metalness: 0.26, flatShading: true,
+  emissive: c, emissiveIntensity: 0.22,
+});
+const plateMat = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.82, metalness: 0.22, flatShading: true });
+const glowMat = (c) => new THREE.MeshStandardMaterial({ color: 0x000000, emissive: c, emissiveIntensity: 3.4, roughness: 1, toneMapped: true });
 
 // ---- models --------------------------------------------------------------------
 // Each returns a merged geometry using slots 0 hull / 1 glow / 2 plate, built nose-down +Z.
@@ -72,6 +93,8 @@ function jeepGeo() {
     }
   }
   P.push({ geo: new THREE.BoxGeometry(1.30, 0.10, 0.10), pos: [0, 1.53, 0.22], mat: 2 });   // cage spine
+  // roof beacon: the one part that is readable from the far side of the arena
+  P.push({ geo: new THREE.BoxGeometry(0.26, 0.12, 0.26), pos: [0, 1.64, 0.22], mat: 1 });
   // sensor bar across the snout
   P.push({ geo: new THREE.BoxGeometry(0.92, 0.10, 0.06), pos: [0, 0.80, 1.78], mat: 1 });
   for (const sx of [-1, 1]) P.push({ geo: new THREE.BoxGeometry(0.08, 0.26, 0.06), pos: [sx * 0.74, 0.95, 0.10], mat: 1 });
@@ -106,6 +129,7 @@ function bikeGeo() {
   }
   P.push({ geo: new THREE.BoxGeometry(0.34, 0.07, 0.05), pos: [0, 0.95, 1.38], mat: 1 });  // headlight strip
   P.push({ geo: new THREE.BoxGeometry(0.06, 0.05, 1.20), pos: [0, 0.62, 0.05], mat: 1 });  // underglow
+  P.push({ geo: new THREE.BoxGeometry(0.18, 0.10, 0.18), pos: [0, 1.46, -0.08], mat: 1 });  // beacon
   return mergeParts(P);
 }
 
@@ -117,6 +141,7 @@ function droneGeo() {
   P.push({ geo: new THREE.CylinderGeometry(0.055, 0.07, 0.66, 7), pos: [0, -0.22, 0.86], rot: [Math.PI / 2, 0, 0], mat: 2 });
   // single eye, the thing you learn to shoot at
   P.push({ geo: new THREE.SphereGeometry(0.16, 10, 8), pos: [0, 0.05, 0.72], mat: 1 });
+  P.push({ geo: new THREE.BoxGeometry(0.20, 0.10, 0.20), pos: [0, 0.40, 0], mat: 1 });   // beacon
   // four arms and their rotor rings
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
     const x = sx * 0.78, z = sz * 0.74;
@@ -145,7 +170,7 @@ export function createEnemies(scene, fx, hooks = {}) {
 
   // one material set per type so the accent colour differs, shared across that type's pool
   const mats = {};
-  for (const k of TYPE_KEYS) mats[k] = [hullMat(), glowMat(TYPES[k].colour), plateMat()];
+  for (const k of TYPE_KEYS) mats[k] = [hullMat(TYPES[k].hull), glowMat(TYPES[k].colour), plateMat(TYPES[k].plate)];
   const bladeMat = new THREE.MeshStandardMaterial({ color: 0x3a3f4b, roughness: 0.5, metalness: 0.6, transparent: true, opacity: 0.55 });
 
   const list = [];         // every enemy, alive or parked — the weapon filters on .alive
@@ -427,6 +452,28 @@ export function createEnemies(scene, fx, hooks = {}) {
         // stay inside the fence
         const rr = Math.hypot(e.pos.x, e.pos.z);
         if (rr > ARENA - 3) { e.pos.x *= (ARENA - 3) / rr; e.pos.z *= (ARENA - 3) / rr; }
+
+        // --- tyre smoke ---
+        // Anything with wheels leaves a trail, so the field reads as traffic rather than as shapes
+        // sliding about. Rate-based with the fraction carried over, the same as the player's, and
+        // every driven wheel fires on the same step so it never comes off one side only.
+        const axle = REAR_AXLE[e.type];
+        const groundSpeed = Math.hypot(e.vel.x, e.vel.z);
+        if (axle && groundSpeed > 2.5) {
+          const k = e.elite ? ELITE_SCALE : 1;
+          e.dust = (e.dust || 0) + dt * (2 + Math.min(6, groundSpeed * 0.35));
+          const puffs = Math.min(3, Math.floor(e.dust));
+          e.dust -= puffs;
+          const sy = Math.sin(e.yaw), cy = Math.cos(e.yaw);
+          for (let n = 0; n < puffs; n++) for (const ox of axle.xs) {
+            // model space to world: forward is (sin, cos), the right-hand side is (-cos, sin)
+            fx.dust(
+              e.pos.x + (-cy * ox + sy * axle.z) * k,
+              e.pos.z + (sy * ox + cy * axle.z) * k,
+              -e.vel.x * 0.12, -e.vel.z * 0.12, k,
+            );
+          }
+        }
 
         // --- contact ---
         // Anything that actually reaches the car goes up on it. Rammers hit hardest because that

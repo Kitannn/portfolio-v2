@@ -7,9 +7,15 @@ import { rand, randInt, TAU } from "./util.js";
 export const ARENA = 260;      // play radius; past this the player is nudged back
 const GROUND = 1400;           // visual ground plate, much larger so the horizon never shows an edge
 
+// Thinner than it was. The stands now ring the arena at 260 m and carry the work history on them,
+// and at the old density the far side of the bowl was 84% haze — you could not read the stand you
+// were driving toward. Exported because the ground shader has to fade to the same curve or the
+// floor and the air disagree about how far away things are.
+export const FOG_DENSITY = 0.0034;
+
 export function buildWorld(scene) {
   scene.background = new THREE.Color(0x05050a);
-  scene.fog = new THREE.FogExp2(0x06060d, 0.0052);
+  scene.fog = new THREE.FogExp2(0x06060d, FOG_DENSITY);
 
   // ---- ground: one big plate, grid drawn in world space so it reads as infinite ----
   const mat = new THREE.ShaderMaterial({
@@ -64,7 +70,7 @@ export function buildWorld(scene) {
         col += uGlow * major * pulse * 0.10 * near;
 
         // distance fog, matched to the scene's FogExp2 so the plate melts into the sky
-        float f = 1.0 - exp(-pow(d * 0.0052, 2.0));
+        float f = 1.0 - exp(-pow(d * ${FOG_DENSITY.toFixed(5)}, 2.0));
         col = mix(col, uFog, clamp(f, 0.0, 1.0));
         gl_FragColor = vec4(col, 1.0);
       }
@@ -137,9 +143,11 @@ export function buildWorld(scene) {
 
   for (let i = 0; i < PYLONS; i++) {
     const a = (i / PYLONS) * TAU + rand(-0.08, 0.08);
-    const r = rand(ARENA * 1.12, ARENA * 2.1);
-    const h = rand(30, 110);
-    const w = rand(9, 22);
+    // Clear of the colosseum, which reaches 322 m out and 78 m up — anything nearer than this
+    // would be growing out of the back of the stands.
+    const r = rand(ARENA * 1.5, ARENA * 2.7);
+    const h = rand(55, 175);
+    const w = rand(11, 26);
     pos.set(Math.cos(a) * r, h / 2, Math.sin(a) * r);
     q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rand(0, TAU));
     scl.set(w, h, w);
@@ -180,34 +188,16 @@ export function buildWorld(scene) {
   slabs.receiveShadow = true;
   props.add(slabs, slabGlow);
 
-  // ---- arena boundary: a ring of light the player is pushed back from ----
-  const fence = new THREE.Mesh(
-    new THREE.CylinderGeometry(ARENA, ARENA, 9, 96, 1, true),
-    new THREE.ShaderMaterial({
-      side: THREE.DoubleSide, transparent: true, depthWrite: false,
-      uniforms: { uCol: { value: new THREE.Color(0x7cc6ff) }, uTime: { value: 0 } },
-      vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
-      fragmentShader: `
-        uniform vec3 uCol; uniform float uTime; varying vec2 vUv;
-        void main(){
-          float bars = smoothstep(0.55, 1.0, sin(vUv.x * 380.0) * 0.5 + 0.5);
-          float fadeUp = 1.0 - vUv.y;
-          float pulse = 0.55 + 0.45 * sin(uTime * 1.6 + vUv.x * 30.0);
-          gl_FragColor = vec4(uCol, (0.10 + bars * 0.22) * fadeUp * pulse);
-        }
-      `,
-    })
-  );
-  fence.position.y = 4.5;
-  scene.add(fence);
+  // The boundary used to be a shimmer of light because there was nothing there. There is a
+  // barrier wall eleven metres high around the whole floor now (see colosseum.js), so the fence
+  // has been taken out rather than left to z-fight with it.
 
   return {
-    ground, mat, fence, key,
+    ground, mat, key,
     update(dt, t, camera, playerPos) {
       mat.uniforms.uTime.value = t;
       if (playerPos) mat.uniforms.uPlayer.value.set(playerPos.x, playerPos.z);
       mat.uniforms.uCam.value.copy(camera.position);
-      fence.material.uniforms.uTime.value = t;
       // keep the ground plate and prop ring centred on the camera so nothing ever pops in
       ground.position.x = camera.position.x;
       ground.position.z = camera.position.z;

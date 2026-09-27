@@ -246,6 +246,13 @@ const PITCH_MAX = 1.44;        // ...and straight down
 const PITCH_REST = 0.34;       // what chase mode sits at, and where mouse-look starts
 const PIVOT_Y = 1.45;          // the point on the car the camera orbits
 const CAM_FLOOR = 2.0;         // never below this: clears the roof and the gun, and the ground
+// The camera sits nine to twelve metres behind the car, so any time the car is near the edge of
+// the floor the camera wants to be outside it. That was harmless when the boundary was a sheet of
+// light with empty plain behind it; the arena is walled now, and an unclamped camera ends up
+// inside the barrier looking at the back of a sign. It gets pulled in, and rises a little as it
+// does, which reads as the camera climbing the wall rather than passing through it.
+const CAM_LIMIT = ARENA - 2;
+const CAM_CLIMB = 0.42;
 const PULL_IN = 0.84;          // share of the radius given up looking straight up
 const PUSH_OUT = 0.55;         // ...and added looking straight down
 const AIM_H = 13.5;            // effective height the aim ray falls from; sets how pitch maps to reach
@@ -331,6 +338,14 @@ export function createChaseCam(camera) {
           player.pos.z + Math.cos(camYaw) * (3.0 + sp * 0.10)
         );
       }
+      // keep the camera inside the bowl, whatever the car is doing
+      const gr = Math.hypot(goal.x, goal.z);
+      if (gr > CAM_LIMIT) {
+        const k = CAM_LIMIT / gr;
+        goal.y += (gr - CAM_LIMIT) * CAM_CLIMB;
+        goal.x *= k; goal.z *= k;
+      }
+
       if (freeLook) {
         // Rigid while aiming. Any smoothing here lets the camera lag the car through a corner,
         // which slides the reticle off the fixed crosshair — and the whole point of this mode is

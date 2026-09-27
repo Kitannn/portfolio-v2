@@ -9,7 +9,7 @@ import { clamp, damp, rand, TAU } from "./util.js";
 const DEBRIS = 900;     // shards across every simultaneous explosion
 const FLASHES = 40;     // blast shells
 const SHARDS = 260;     // XP diamonds waiting to be collected
-const PUFFS = 300;      // tyre smoke
+const PUFFS = 460;      // tyre smoke — the player's, plus every enemy vehicle on the field
 const FLAMES = 200;     // afterburner
 
 // Where the trails come from, in the car's own space (see car.js for the real measurements):
@@ -124,6 +124,10 @@ export function createFx(scene) {
 
   const SMOKE_HOT = new THREE.Color(0xb9c2d4);
   const SMOKE_COOL = new THREE.Color(0x5a6272);
+  // The opposition smokes too, but dimmer and browner — a field of thirty of them at the player's
+  // own brightness would be a fog bank, and the player's trail has to stay the readable one.
+  const DUST_HOT = new THREE.Color(0x6a6c78);
+  const DUST_COOL = new THREE.Color(0x33323c);
   const FLAME_CORE = new THREE.Color(0xfff2c8);
   const FLAME_MID = new THREE.Color(0xff9a3c);
   const FLAME_TAIL = new THREE.Color(0xff2a18);
@@ -276,12 +280,16 @@ export function createFx(scene) {
       const rx0 = -cosY, rz0 = sinY;           // right
 
       // ---- afterburner ----
+      // Both pipes get a particle on every step, rather than alternating sides per particle. The
+      // old way biased hard to the left: a frame's worth of emission is usually two or three
+      // particles, and an odd count starting at side -1 means that side always gets the extra
+      // one. At a low enough rate it was one particle a frame and the right pipe never fired at
+      // all. Counting in PAIRS is the only way this comes out even, so the rate is per pipe now.
       if (player.boosting) {
-        debt.flame += dt * 150;
+        debt.flame += dt * 75;
         const n = Math.floor(debt.flame);
         debt.flame -= n;
-        for (let j = 0; j < n; j++) {
-          const side = j % 2 ? 1 : -1;
+        for (let j = 0; j < n; j++) for (const side of [-1, 1]) {
           spot.set(
             player.pos.x + rx0 * PIPE_X * side + fx0 * PIPE_Z,
             PIPE_Y,
@@ -311,12 +319,11 @@ export function createFx(scene) {
       if (slip > 2.5) rate += Math.min(120, (slip - 2.5) * 16);
       if (handbrake && sp > 3) rate += 60;
       if (rate > 0) {
-        debt.smoke += dt * rate;
-        const n = Math.min(14, Math.floor(debt.smoke));
+        debt.smoke += dt * rate * 0.5;          // per tyre now, and both tyres fire together
+        const n = Math.min(7, Math.floor(debt.smoke));
         debt.smoke -= n;
         const hard = slip > 4 || handbrake;
-        for (let j = 0; j < n; j++) {
-          const side = j % 2 ? 1 : -1;
+        for (let j = 0; j < n; j++) for (const side of [-1, 1]) {
           spot.set(
             player.pos.x + rx0 * REAR_X * side + fx0 * REAR_Z + rand(-0.2, 0.2),
             0.12 + Math.random() * 0.2,
@@ -339,6 +346,18 @@ export function createFx(scene) {
 
       stepTrail(flames, flameMesh, dt, true);
       stepTrail(puffs, puffMesh, dt, false);
+    },
+
+    // One puff off a contact patch, for anything with tyres that is not the player. The enemy
+    // vehicles drive their own emission (they know where their own axles are); all this owns is
+    // what a puff looks like, so the whole field smokes consistently.
+    dust(x, z, vx, vz, scale = 1) {
+      spot.set(x + rand(-0.15, 0.15), 0.1 + Math.random() * 0.16, z + rand(-0.15, 0.15));
+      eject.set(vx + rand(-0.6, 0.6), rand(0.4, 1.5), vz + rand(-0.6, 0.6));
+      pCursor = emit(puffs, pCursor, spot, eject, {
+        life: rand(0.26, 0.5), size: rand(0.16, 0.26) * scale, grow: 0.5 * scale,
+        col: DUST_HOT, col2: DUST_COOL,
+      });
     },
 
     // onPickup(value) is called once per diamond collected
