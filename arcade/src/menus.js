@@ -82,7 +82,7 @@ export function createMenus(host, { onClose, onVehicle } = {}) {
           <button class="veh ${v.owned ? "" : "locked"} ${v.id === cur ? "on" : ""}" data-veh="${v.id}" type="button" ${v.owned ? "" : "disabled"}>
             <span class="veh-art" aria-hidden="true">${v.owned ? carSvg() : silhouetteSvg()}</span>
             <b>${esc(v.name)}</b>
-            <small>${v.owned ? `${esc(v.maker)} · ${esc(v.year)}` : "Locked"}</small>
+            <small>${v.owned ? esc([v.maker, v.year].filter(Boolean).join(" · ")) : "Locked"}</small>
             <p>${esc(v.blurb)}</p>
             ${v.id === cur ? `<span class="veh-tag">Selected</span>` : ""}
           </button>`).join("")}
@@ -347,7 +347,7 @@ export function createMenus(host, { onClose, onVehicle } = {}) {
           <li><b>◆ ${(s.credits || 0).toLocaleString()}</b> credits</li>
           <li>Every <b>Shop</b> upgrade${cars ? ` across ${cars} vehicle tree${cars === 1 ? "" : "s"}` : ""} — no refund</li>
           <li>Your <b>Collection</b> — ${Object.keys(s.discovered || {}).length} discovered cards forgotten</li>
-          <li><b>Vehicles</b> back to the starting GR 86</li>
+          <li><b>Vehicles</b> back to the Starter Vehicle</li>
           <li>All <b>records</b> — ${s.runs || 0} runs, ${s.deaths || 0} deaths, every leaderboard entry</li>
           <li>Every <b>achievement</b> — ${ach.earned(s)}/${ach.total()} earned, and the permanent bonuses they grant</li>
           <li>Your <b>player name</b></li>

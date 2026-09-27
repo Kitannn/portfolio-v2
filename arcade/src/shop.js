@@ -7,7 +7,9 @@
 // and the back row is something to work toward.
 export const VEHICLES = [
   {
-    id: "gr86", name: "GR 86", year: "2025", maker: "Toyota",
+    // The id stays `gr86` whatever the car is called on screen: it is the key the mastery map is
+    // stored under, so renaming it would quietly orphan every upgrade anyone has already bought.
+    id: "gr86", name: "Starter Vehicle", maker: "Standard issue",
     blurb: "Light, rear-drive and happy sideways. The one you start with.",
     owned: true, colour: 0xeef1f6,
   },
