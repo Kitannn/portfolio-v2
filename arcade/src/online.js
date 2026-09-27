@@ -12,7 +12,7 @@ import { localeTag } from "./name.js";
 
 // Set this to the Worker's URL after deploying server/ — see server/README.md. While it is empty
 // the whole feature stays inert and the panel says so, rather than pretending to be offline.
-const BUILT_IN = "";
+const BUILT_IN = "https://hkitandrun-board.hkitannn.workers.dev";
 
 // A per-browser override, so a Worker can be pointed at without editing and redeploying the site:
 //   localStorage.setItem("hkitandrun.endpoint", "https://…workers.dev")

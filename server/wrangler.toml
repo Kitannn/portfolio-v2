@@ -14,7 +14,7 @@ compatibility_date = "2026-09-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "hkitandrun"
-database_id = "PASTE_THE_ID_FROM_wrangler_d1_create"
+database_id = "f20c95c3-0495-4ca1-a0e8-9db0b5c04c34"
 
 [observability]
 enabled = true
