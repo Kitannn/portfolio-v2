@@ -192,10 +192,25 @@ Add the name to `event-names.js`, then call `window.track("your_name")` — or
 `window.trackOnce(...)` for something that would otherwise fire on every scroll. Both are no-ops if
 `analytics.js` did not load, so a call site can never break a page.
 
-### Optional: Cloudflare Web Analytics
+### Cloudflare Web Analytics
 
-For referrers, countries, browsers and Core Web Vitals — none of which the Worker collects — add
-Cloudflare's own beacon. It is free and unlimited: dashboard → **Web Analytics** → add
-`kitannn.com`, then paste the snippet it gives you into `index.html`. Two caveats: it is a
-third-party script from `static.cloudflareinsights.com`, and ad blockers block it, so its numbers
-will read lower than the first-party ones above.
+Already wired — it just needs a token. This covers the things the counters above deliberately
+cannot: **referrers, countries, browsers and Core Web Vitals**. Free, unlimited pageviews, no card.
+
+1. Cloudflare dashboard → **Web Analytics** → **Add a site** → `kitannn.com`
+2. It shows you a snippet. You only need the token out of it — the long hex string in
+   `data-cf-beacon='{"token": "..."}'`
+3. Put it in `CF_BEACON` at the top of `analytics.js`
+4. Bump `analytics.js?v=` in `index.html` and `arcade/index.html`, then commit and push
+
+Until that constant has a value **nothing is requested** — no script tag is created at all, so an
+empty token costs exactly nothing. It is injected from `analytics.js` rather than pasted into each
+page so there is one place to put the token and it covers the portfolio and the arcade together.
+
+Two caveats worth knowing. It is a third-party script from `static.cloudflareinsights.com`, which
+is one external request on a site otherwise kept deliberately lean. And **ad blockers block it** —
+so its pageview numbers will always read lower than the first-party counters above. Treat the
+first-party ones as the true figures and Cloudflare's as the extra dimensions.
+
+Setting `localStorage.setItem("kv.analytics", "off")` in a browser disables both halves in that
+browser, which is handy for keeping your own visits out of your own numbers.

@@ -30,6 +30,29 @@
     else if (over) ENDPOINT = over.replace(/\/+$/, "");
   } catch (e) { /* storage blocked: the built-in endpoint stands */ }
 
+  // ---- Cloudflare Web Analytics --------------------------------------------------
+  // Free and unlimited, and it answers the things the counters above deliberately cannot:
+  // referrers, countries, browsers and Core Web Vitals. It needs a site token, which only the
+  // Cloudflare dashboard can mint — see server/README.md.
+  //
+  // Injected from here rather than pasted into each page so there is ONE place to put the token
+  // and it covers the portfolio and the arcade together. Nothing is requested until a real token
+  // is set, so an empty constant costs exactly nothing.
+  var CF_BEACON = "";      // dashboard -> Web Analytics -> add kitannn.com -> copy the token
+
+  if (CF_BEACON && ENDPOINT !== "") {
+    try {
+      var cf = document.createElement("script");
+      cf.defer = true;
+      cf.src = "https://static.cloudflareinsights.com/beacon.min.js";
+      cf.setAttribute("data-cf-beacon", JSON.stringify({ token: CF_BEACON }));
+      // Ad blockers block this script, which is fine and expected — it fails quietly and the
+      // first-party counters above carry on regardless. They will always read a little higher.
+      cf.onerror = function () { /* blocked; nothing to do */ };
+      (document.head || document.documentElement).appendChild(cf);
+    } catch (e) { /* never let a beacon break a page */ }
+  }
+
   var BATCH = 40;          // the Worker refuses more than this in one post
   var IDLE_FLUSH = 12000;  // send what we have if nothing else happens
   var queue = [];
