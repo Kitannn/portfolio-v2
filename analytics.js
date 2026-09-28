@@ -38,12 +38,14 @@
   // Injected from here rather than pasted into each page so there is ONE place to put the token
   // and it covers the portfolio and the arcade together. Nothing is requested until a real token
   // is set, so an empty constant costs exactly nothing.
-  var CF_BEACON = "";      // dashboard -> Web Analytics -> add kitannn.com -> copy the token
+  var CF_BEACON = "d75c2067df8241299d95b3053412f067";
 
   if (CF_BEACON && ENDPOINT !== "") {
     try {
       var cf = document.createElement("script");
-      cf.defer = true;
+      // type=module, matching the snippet Cloudflare currently issues — the beacon is an ES
+      // module now, and a module script defers by default so no `defer` is needed.
+      cf.type = "module";
       cf.src = "https://static.cloudflareinsights.com/beacon.min.js";
       cf.setAttribute("data-cf-beacon", JSON.stringify({ token: CF_BEACON }));
       // Ad blockers block this script, which is fine and expected — it fails quietly and the
