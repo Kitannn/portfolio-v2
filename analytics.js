@@ -24,6 +24,17 @@
   // at while developing, so test traffic never lands in the real counters:
   //   localStorage.setItem("kv.analytics", "http://localhost:8787")
   //   localStorage.setItem("kv.analytics", "off")      // or switch it off entirely
+  //
+  // It can also be set by visiting a link, which is the only practical way to do it on a phone or
+  // in a browser whose console you are not about to open:
+  //   kitannn.com/?analytics=off     stop counting this browser
+  //   kitannn.com/?analytics=on      start again
+  // The choice is remembered per browser, per origin, and covers the arcade as well as the site.
+  try {
+    if (/[?&]analytics=off(&|$)/.test(location.search)) localStorage.setItem("kv.analytics", "off");
+    else if (/[?&]analytics=on(&|$)/.test(location.search)) localStorage.removeItem("kv.analytics");
+  } catch (e) { /* storage blocked: nothing to remember it with */ }
+
   try {
     var over = localStorage.getItem("kv.analytics");
     if (over === "off") ENDPOINT = "";

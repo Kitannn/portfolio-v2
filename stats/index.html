@@ -63,6 +63,17 @@
   .gate button { font: inherit; padding: 11px; cursor: pointer; border: 1px solid var(--sky); background: rgba(124,198,255,.12); color: var(--fg); letter-spacing: .18em; text-transform: uppercase; font-size: 11px; }
   .msg { font-size: 11px; color: var(--danger); min-height: 18px; }
   .note { font-size: 10px; line-height: 1.7; color: rgba(238,234,245,.4); }
+
+  /* excluding your own visits: same origin as the site, so the switch here covers both */
+  .me { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 15px; border: 1px solid var(--line); background: rgba(14,13,20,.7); }
+  .me p { font-size: 11px; color: var(--muted); flex: 1 1 260px; }
+  .me b { color: var(--fg); }
+  .me button { font: inherit; font-size: 10px; letter-spacing: .16em; text-transform: uppercase; cursor: pointer; padding: 8px 15px; border: 1px solid var(--line); background: rgba(238,234,245,.04); color: var(--fg); }
+  .me.off { border-color: rgba(86,208,109,.45); background: rgba(86,208,109,.07); }
+  .me.off button { border-color: rgba(86,208,109,.5); }
+  .me .state { font-family: "Silkscreen", monospace; font-size: 12px; }
+  .me.off .state { color: var(--plumb); }
+  .me.on .state { color: var(--yolk); }
   a { color: var(--sky); }
 </style>
 </head>
@@ -132,6 +143,8 @@ function rows(totals, prefix, label) {
 
 function render(d) {
   const t = d.totals || {};
+  let counted = true;
+  try { counted = localStorage.getItem("kv.analytics") !== "off"; } catch (e) { /* assume counted */ }
   const tm = d.timings || {};
   const visits = t.visit || 0;
   const avg = (name) => { const x = tm[name]; return x && x.n ? mins(x.total / x.n) : "—"; };
@@ -198,8 +211,24 @@ function render(d) {
     ${rows(t, "cheat", "Cheat codes found")}
     ${rows(t, "quit", "Where people stopped")}
 
+    <div class="me ${counted ? "on" : "off"}">
+      <span class="state">${counted ? "COUNTED" : "NOT COUNTED"}</span>
+      <p>This browser is ${counted ? "<b>being counted</b> in the numbers above" : "<b>excluded</b> — your own visits are not recorded"}.
+        Per browser and per device, so do it again on your phone if you want to.</p>
+      <button id="metoggle" type="button">${counted ? "Stop counting me" : "Count me again"}</button>
+    </div>
+
     <p class="note">Counters only — no cookies, no visitor ids, nothing that can be traced to a
       person. <a href="/">← kitannn.com</a></p>`;
+
+  document.getElementById("metoggle").onclick = () => {
+    // Same origin as the site, so what is set here applies to kitannn.com and the arcade too.
+    try {
+      if (counted) localStorage.setItem("kv.analytics", "off");
+      else localStorage.removeItem("kv.analytics");
+    } catch (e) { /* storage blocked: nothing to remember it with */ }
+    render(d);
+  };
 
   document.querySelectorAll("[data-days]").forEach((b) => {
     b.onclick = () => { days = +b.dataset.days; load(); };
