@@ -49,6 +49,12 @@ export const allFound = () => ALL_IDS.every((id) => active().includes(id));
 
 // Drop a single code. The unlock lives in storage, so this really does remove it — finishing
 // that input string again on the portfolio brings it straight back.
+// Fired from the portfolio when a code is completed there, so the funnel can show how many
+// visitors ever discover that the barcodes do anything at all.
+export function noteFound(id) {
+  window.track?.(`cheat:${String(id).toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 38)}`);
+}
+
 export function deactivate(id) {
   const d = read();
   d.ids = (d.ids || []).filter((x) => x !== id);

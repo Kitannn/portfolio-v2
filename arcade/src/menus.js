@@ -195,6 +195,7 @@ export function createMenus(host, { onClose, onVehicle } = {}) {
       const cost = nextCost(node, own);
       if (cost === null || !store.spend(cost)) return;
       own[node.id] = (own[node.id] || 0) + 1;
+      window.track?.(`shop:${String(node.id).toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 38)}`);
       store.flush();
       shop();
     }));
@@ -361,7 +362,7 @@ export function createMenus(host, { onClose, onVehicle } = {}) {
     }));
     host.querySelectorAll("[data-online]").forEach((b) => b.addEventListener("click", async () => {
       const what = b.dataset.online;
-      if (what === "no") { online.setConsent(false); board(); return; }
+      if (what === "no") { window.track?.("online_declined"); online.setConsent(false); board(); return; }
       if (what === "off") {
         confirmDialog({
           title: "Stop posting runs?",
@@ -376,6 +377,7 @@ export function createMenus(host, { onClose, onVehicle } = {}) {
       b.textContent = "Joining…";
       try {
         await online.enroll(store.save().name);
+        window.track?.("online_optin");
         online.invalidate();
         scope = "global";
       } catch (e) {

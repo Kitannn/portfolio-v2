@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Unlisted and unindexed. The key lives in the URL FRAGMENT, which browsers never put in a
+     request, so it stays out of server logs, out of the Referer header and out of history sync. -->
+<meta name="robots" content="noindex, nofollow, noarchive">
+<title>Stats — kitannn.com</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>📊</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Silkscreen:wght@400;700&display=swap">
+<style>
+  :root {
+    --bg: #07070c; --fg: #eeeaf5; --muted: rgba(238,234,245,.55); --line: rgba(238,234,245,.14);
+    --sky: #7cc6ff; --yolk: #ffc94a; --plumb: #56d06d; --danger: #ff4d5e; --epic: #c07bff;
+    color-scheme: dark;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--fg); min-height: 100vh;
+    font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 13px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased; padding: 28px 20px 60px;
+  }
+  .wrap { width: min(1040px, 100%); margin: 0 auto; display: grid; gap: 26px; }
+  h1 { font-family: "Silkscreen", monospace; font-weight: 400; font-size: 26px; letter-spacing: .06em; }
+  .head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); padding-bottom: 14px; }
+  .head p { font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); }
+  .range { display: flex; gap: 6px; }
+  .range button {
+    font: inherit; font-size: 10px; letter-spacing: .16em; text-transform: uppercase; cursor: pointer;
+    padding: 6px 12px; border: 1px solid var(--line); background: rgba(238,234,245,.03); color: var(--muted);
+  }
+  .range button.on { color: #07070c; background: var(--sky); border-color: var(--sky); }
+
+  section { display: grid; gap: 10px; }
+  h2 { font-size: 10px; letter-spacing: .28em; text-transform: uppercase; color: var(--sky); }
+
+  /* the funnel: each step drawn as a share of the one before it */
+  .funnel { display: grid; gap: 4px; }
+  .step { display: grid; grid-template-columns: 200px 1fr 118px; align-items: center; gap: 12px; padding: 7px 10px; background: rgba(14,13,20,.7); }
+  .step b { font-weight: 500; font-size: 12px; }
+  .step .bar { height: 12px; background: rgba(238,234,245,.07); position: relative; }
+  .step .bar i { display: block; height: 100%; background: var(--c, var(--sky)); box-shadow: 0 0 10px var(--c, var(--sky)); }
+  .step .num { text-align: right; font-family: "Silkscreen", monospace; font-size: 13px; }
+  .step .num em { font-style: normal; font-size: 10px; color: var(--muted); margin-left: 7px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 8px; }
+  .tile { padding: 12px 14px; border: 1px solid var(--line); background: rgba(14,13,20,.7); display: grid; gap: 3px; }
+  .tile b { font-family: "Silkscreen", monospace; font-size: 21px; color: var(--fg); }
+  .tile span { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+  .tile.gold b { color: var(--yolk); } .tile.green b { color: var(--plumb); } .tile.epic b { color: var(--epic); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+  th { font-size: 9px; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); font-weight: 400; }
+  td.n { text-align: right; font-family: "Silkscreen", monospace; }
+  .empty { padding: 18px 10px; color: var(--muted); font-size: 12px; }
+
+  .gate { display: grid; gap: 12px; max-width: 420px; margin: 12vh auto 0; }
+  .gate input { font: inherit; padding: 11px 13px; background: rgba(238,234,245,.05); border: 1px solid var(--line); color: var(--fg); }
+  .gate button { font: inherit; padding: 11px; cursor: pointer; border: 1px solid var(--sky); background: rgba(124,198,255,.12); color: var(--fg); letter-spacing: .18em; text-transform: uppercase; font-size: 11px; }
+  .msg { font-size: 11px; color: var(--danger); min-height: 18px; }
+  .note { font-size: 10px; line-height: 1.7; color: rgba(238,234,245,.4); }
+  a { color: var(--sky); }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><p class="note">Loading…</p></div>
+
+<script>
+// Same Worker as the leaderboard and the analytics beacon.
+let ENDPOINT = "https://hkitandrun-board.hkitannn.workers.dev";
+// Same per-browser override as analytics.js and online.js, so a local Worker can be pointed at
+// while developing without the real key ever leaving the machine.
+try { ENDPOINT = localStorage.getItem("kv.analytics") || ENDPOINT; } catch (e) { /* fine */ }
+if (ENDPOINT === "off") ENDPOINT = "https://hkitandrun-board.hkitannn.workers.dev";
+const app = document.getElementById("app");
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const n = (v) => (v || 0).toLocaleString();
+const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
+const mins = (s) => (s >= 3600 ? `${(s / 3600).toFixed(1)}h` : s >= 60 ? `${Math.round(s / 60)}m` : `${Math.round(s)}s`);
+
+// The key comes from the fragment so it never leaves the browser in a request line.
+let key = location.hash.slice(1);
+let days = 30;
+
+function gate(msg) {
+  app.innerHTML = `
+    <div class="gate">
+      <h1>Stats</h1>
+      <p class="note">Private. Paste the key — it goes in the URL fragment, so it is never sent to
+        a server as part of the address and never lands in a log.</p>
+      <input id="k" type="password" placeholder="stats key" autocomplete="off" spellcheck="false">
+      <button id="go" type="button">Open</button>
+      <p class="msg">${msg ? esc(msg) : ""}</p>
+    </div>`;
+  const input = document.getElementById("k");
+  const open = () => {
+    key = input.value.trim();
+    if (!key) return;
+    location.hash = key;
+    load();
+  };
+  document.getElementById("go").onclick = open;
+  input.onkeydown = (e) => { if (e.key === "Enter") open(); };
+  input.focus();
+}
+
+function step(label, value, base, colour) {
+  return `<div class="step" style="--c:${colour}">
+    <b>${esc(label)}</b>
+    <span class="bar"><i style="width:${Math.min(100, pct(value, base))}%"></i></span>
+    <span class="num">${n(value)}<em>${pct(value, base)}%</em></span>
+  </div>`;
+}
+
+const tile = (value, label, cls = "") => `<div class="tile ${cls}"><b>${value}</b><span>${esc(label)}</span></div>`;
+
+function rows(totals, prefix, label) {
+  const list = Object.entries(totals)
+    .filter(([k]) => k.startsWith(prefix + ":"))
+    .map(([k, v]) => [k.slice(prefix.length + 1), v])
+    .sort((a, b) => b[1] - a[1]);
+  if (!list.length) return `<section><h2>${esc(label)}</h2><p class="empty">Nothing yet.</p></section>`;
+  return `<section><h2>${esc(label)}</h2><table>
+    <tr><th></th><th style="text-align:right">Count</th></tr>
+    ${list.map(([k, v]) => `<tr><td>${esc(k)}</td><td class="n">${n(v)}</td></tr>`).join("")}
+  </table></section>`;
+}
+
+function render(d) {
+  const t = d.totals || {};
+  const tm = d.timings || {};
+  const visits = t.visit || 0;
+  const avg = (name) => { const x = tm[name]; return x && x.n ? mins(x.total / x.n) : "—"; };
+
+  app.innerHTML = `
+    <div class="head">
+      <div><h1>Stats</h1><p>${esc(d.from)} → today · anonymous counters, no visitor ids</p></div>
+      <div class="range">
+        ${[7, 30, 90, 365].map((v) => `<button data-days="${v}" class="${v === days ? "on" : ""}">${v}d</button>`).join("")}
+      </div>
+    </div>
+
+    <section>
+      <h2>Site funnel</h2>
+      <div class="funnel">
+        ${step("Visits", visits, visits, "var(--sky)")}
+        ${step("Past the intro", t.intro_passed || 0, visits, "var(--sky)")}
+        ${step("Saw Experience", t["section:experience"] || 0, visits, "var(--plumb)")}
+        ${step("Saw Work", t["section:work"] || 0, visits, "var(--plumb)")}
+        ${step("Saw Contact", t["section:contact"] || 0, visits, "var(--plumb)")}
+        ${step("Downloaded the CV", t.cv_download || 0, visits, "var(--yolk)")}
+        ${step("Clicked out", Object.entries(t).filter(([k]) => k.startsWith("outbound:")).reduce((a, [, v]) => a + v, 0), visits, "var(--yolk)")}
+      </div>
+    </section>
+
+    <section>
+      <h2>At a glance</h2>
+      <div class="grid">
+        ${tile(n(visits), "visits")}
+        ${tile(avg("dwell:site"), "avg time on site")}
+        ${tile(n(t["device:mobile"] || 0), "on mobile")}
+        ${tile(n(t.cv_download || 0), "CV downloads", "gold")}
+        ${tile(n(t.cv_page || 0), "CV page", "gold")}
+        ${tile(n(t.pak_clicked || 0), "arcade clicks", "epic")}
+      </div>
+    </section>
+
+    <section>
+      <h2>The game</h2>
+      <div class="grid">
+        ${tile(n(t.game_load || 0), "game loads")}
+        ${tile(n(t.run_started || 0), "runs started")}
+        ${tile(n(t.run_finished || 0), "runs finished")}
+        ${tile(n(t.boss_reached || 0), "reached the Colossus")}
+        ${tile(n(t.boss_killed || 0), "beat it", "green")}
+        ${tile(avg("dwell:title"), "avg on Start screen")}
+        ${tile(avg("dwell:menu"), "avg in menus")}
+        ${tile(avg("dwell:run"), "avg driving", "epic")}
+        ${tile(n(d.board?.players || 0), "board players")}
+        ${tile(n(t.online_optin || 0), "opted in online", "green")}
+        ${tile(n(t.name_set || 0), "picked a name")}
+        ${tile(n(t["input:touch"] || 0), "played on touch")}
+      </div>
+    </section>
+
+    ${rows(t, "page", "Pages")}
+    ${rows(t, "work", "Projects opened")}
+    ${rows(t, "outbound", "Outbound clicks")}
+    ${rows(t, "section", "Sections reached")}
+    ${rows(t, "level", "Level reached")}
+    ${rows(t, "card", "Upgrade cards taken")}
+    ${rows(t, "ach", "Achievements earned")}
+    ${rows(t, "shop", "Shop nodes bought")}
+    ${rows(t, "cheat", "Cheat codes found")}
+    ${rows(t, "quit", "Where people stopped")}
+
+    <p class="note">Counters only — no cookies, no visitor ids, nothing that can be traced to a
+      person. <a href="/">← kitannn.com</a></p>`;
+
+  document.querySelectorAll("[data-days]").forEach((b) => {
+    b.onclick = () => { days = +b.dataset.days; load(); };
+  });
+}
+
+async function load() {
+  if (!key) return gate("");
+  app.innerHTML = `<p class="note">Loading…</p>`;
+  try {
+    const res = await fetch(`${ENDPOINT}/v1/stats?key=${encodeURIComponent(key)}&days=${days}`, { cache: "no-store" });
+    if (res.status === 403) return gate("That key was refused.");
+    if (res.status === 503) return gate("No stats key is set on the Worker yet — run: wrangler secret put STATS_KEY");
+    if (!res.ok) return gate(`The server said ${res.status}.`);
+    render(await res.json());
+  } catch (e) {
+    gate("Could not reach the stats endpoint.");
+  }
+}
+
+// Pasting a different key into the address bar changes only the fragment, which does not reload
+// the document — so without this the page would go on showing whatever it had already drawn.
+addEventListener("hashchange", () => { key = location.hash.slice(1); load(); });
+
+load();
+</script>
+</body>
+</html>

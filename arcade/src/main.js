@@ -24,6 +24,7 @@ import * as online from "./online.js";
 import * as ach from "./achievements.js";
 import { implausible, inconsistent } from "./run-bounds.js";
 import { clamp, damp, esc } from "./util.js";
+import { levelBand } from "./event-names.js";
 
 const $ = (id) => document.getElementById(id);
 const canvas = $("stage");
@@ -275,6 +276,43 @@ function updateAim() {
 
 // ---- state machine -----------------------------------------------------------
 const STATE = { BOOT: "boot", TITLE: "title", PLAYING: "playing", PAUSED: "paused", LEVELUP: "levelup", DYING: "dying", FINISH: "finish" };
+
+// ---- analytics -----------------------------------------------------------------
+// Counters and durations, never a session id — see analytics.js. Every call goes through
+// `window.track`, which is undefined if the script did not load, so all of this is optional.
+//
+// Time is charged to one of three places: the Start screen before anything is clicked, the menus,
+// and actually driving. A stopwatch that moves as the state machine moves is the only way to get
+// that right — measuring from the run's own clock would miss every second spent deciding.
+const T = { title: 0, menu: 0, run: 0 };
+let dwellFrom = Date.now();
+let dwellWhere = "title";
+
+function charge(where) {
+  const now = Date.now();
+  if (dwellWhere && T[dwellWhere] !== undefined) T[dwellWhere] += (now - dwellFrom) / 1000;
+  dwellFrom = now;
+  dwellWhere = where;
+}
+
+// Sent once, on the way out — three totals rather than a stream of transitions.
+let dwellSent = false;
+function sendDwell() {
+  if (dwellSent) return;
+  dwellSent = true;
+  charge(null);
+  for (const k of ["title", "menu", "run"]) {
+    const secs = Math.round(T[k]);
+    if (secs > 0) window.track?.(`dwell:${k}`, secs);
+  }
+  window.trackFlush?.(true);
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") sendDwell(); });
+addEventListener("pagehide", sendDwell);
+
+window.track?.("game_load");
+window.track?.(looksLikeTouch() ? "input:touch" : "input:mouse");
+
 let state = STATE.BOOT;
 let unfreezeIn = 0;     // the half-second the world stays still after a card is taken
 let dyingIn = 0;        // wreck animation before the finish screen
@@ -370,6 +408,7 @@ const startBtn = $("startBtn");
 const menu = $("menu");
 
 startBtn.addEventListener("click", () => {
+  charge("menu");
   startBtn.classList.add("fade-out");
   setTimeout(() => {
     startBtn.hidden = true;
@@ -404,6 +443,7 @@ const levelUp = createLevelUp($("modalHost"), {
 const finish = createFinish($("modalHost"), {
   onRetry: () => startRun(),
   onMenu: () => {
+    charge("menu");
     parkCar();
     refreshCredits();
     titleScreen.hidden = false;
@@ -449,6 +489,8 @@ const pause = createPause($("pauseHost"), {
   onResume: () => togglePause(),
   onQuit: () => {
     // abandoning is not a death: nothing is recorded and nothing is paid
+    charge("menu");
+    window.track?.("quit:run");
     hud.show(false);
     input.releaseMouse?.(true);
     input.setFreeLook?.(false);       // the menus are a cursor place; the next run starts in chase
@@ -509,6 +551,13 @@ function endRun(won) {
   if (payout) store.save().credits += payout;
   if (result.unlocked.length) store.flush();
   result.achCredits = payout;
+  charge("menu");
+  window.track?.("run_finished");
+  window.track?.(`level:${levelBand(result.level)}`);
+  if (result.elapsed >= BOSS_AT) window.track?.("boss_reached");
+  if (won) window.track?.("boss_killed");
+  for (const a of result.unlocked || []) window.track?.(`ach:${a.id.toLowerCase().replace(/[^a-z0-9-]/g, "")}`);
+
   hud.show(false);
   touch.show(false);
   input.releaseMouse?.(true);         // there are buttons on the finish screen
@@ -569,6 +618,8 @@ function startRun() {
   chase.snap(player);
   hud.show(true);
   touch.show(input.touch);
+  charge("run");
+  window.track?.("run_started");
   state = STATE.PLAYING;
 }
 
@@ -586,6 +637,7 @@ function gainXp(value) {
 
 // Take a card: record it, rebuild the stat block from scratch, then let the card do its one-off.
 export function takeCard(card) {
+  window.track?.(`card:${String(card.id).toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 38)}`);
   run.cardsTaken++;
   run.taken[card.id] = (run.taken[card.id] || 0) + 1;
   store.discover(card.id);

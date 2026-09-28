@@ -40,3 +40,17 @@ CREATE TABLE IF NOT EXISTS rate (
   expires INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS rate_expiry ON rate (expires);
+
+-- Analytics. Daily counters, never individual events: one row per (day, name) however many people
+-- trigger it, so a busy day costs the same handful of writes as a quiet one. There is no visitor
+-- id anywhere in here by design — nothing in this table can be traced back to a person.
+-- `total` and `max` are only used by the timing events; counters leave them at zero.
+CREATE TABLE IF NOT EXISTS events (
+  day   TEXT NOT NULL,                    -- YYYY-MM-DD, UTC
+  name  TEXT NOT NULL,                    -- validated against arcade/src/event-names.js
+  n     INTEGER NOT NULL DEFAULT 0,       -- how many times
+  total INTEGER NOT NULL DEFAULT 0,       -- summed seconds, for timings
+  max   INTEGER NOT NULL DEFAULT 0,       -- longest single sample, for timings
+  PRIMARY KEY (day, name)
+);
+CREATE INDEX IF NOT EXISTS events_day ON events (day DESC);

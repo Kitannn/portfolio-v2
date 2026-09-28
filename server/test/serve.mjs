@@ -38,7 +38,7 @@ function makeD1(db) {
 
 const db = new DatabaseSync(join(here, "dev.sqlite"));
 db.exec(readFileSync(join(here, "..", "schema.sql"), "utf8"));
-const env = { DB: makeD1(db), IP_SALT: "dev-salt" };
+const env = { DB: makeD1(db), IP_SALT: "dev-salt", STATS_KEY: "dev-stats-key" };
 
 createServer(async (req, res) => {
   const chunks = [];

@@ -12,6 +12,7 @@
 // disagree with the client about either.
 import { checkName, MIN, MAX } from "../../arcade/src/name-filter.js";
 import { implausible, inconsistent } from "../../arcade/src/run-bounds.js";
+import { validEvent, isTiming } from "../../arcade/src/event-names.js";
 
 // Categories the board ranks. `deaths` is a lifetime tally on the player rather than a run best,
 // which is why it is marked and queried differently.
@@ -29,12 +30,23 @@ const TOP_N = 10;
 const IP_WRITES = 30, IP_WINDOW = 600;         // 30 writes per 10 minutes from one address
 const PLAYER_WRITES = 6, PLAYER_WINDOW = 60;   // a run takes minutes; six a minute is already absurd
 
+// Analytics. Events arrive batched, so this is a cap on BATCHES rather than on events, and it is
+// what keeps the request count inside the Workers free tier during a spike.
+const EVENT_BATCHES = 120;        // per address per 10 minutes
+const EVENTS_PER_BATCH = 40;
+const MAX_TIMING = 6 * 60 * 60;   // six hours; anything longer is a tab left open, not a session
+// A hard ceiling on how many distinct names a single day may create. The allowlist already bounds
+// the shape of a name, but prefixed ones take a free-form suffix, so this bounds the count too.
+const NAMES_PER_DAY = 600;
+
 const ALLOWED_ORIGINS = [
   "https://kitannn.com",
   "https://www.kitannn.com",
   "https://kitannn.github.io",
 ];
 const DEV_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+// A beacon sent from a page being unloaded may carry no Origin header at all; that is normal and
+// is not a reason to drop the batch.
 
 const now = () => Math.floor(Date.now() / 1000);
 
@@ -190,6 +202,116 @@ async function submit(request, env, origin) {
   return json({ ok: true, recorded: values }, 200, origin);
 }
 
+// ---- analytics ------------------------------------------------------------------
+// Counters only. There is no visitor id in the request, none in the table, and none derivable
+// from either — a day's row says forty-one people reached Contact and nothing whatsoever about
+// which forty-one. That is what lets this run without a consent banner, so it is worth keeping
+// true rather than convenient.
+async function collect(request, env, origin) {
+  const body = await request.json().catch(() => null);
+  if (!body || !Array.isArray(body.events)) return json({ error: "bad body" }, 400, origin);
+
+  const ip = await ipKey(request, env);
+  if (!(await rateLimit(env, "ev", ip, EVENT_BATCHES, IP_WINDOW))) {
+    // Quietly, and with a 204: a blocked beacon must never surface as a console error on someone
+    // else's browser. The count is already approximate; a dropped batch changes nothing.
+    return new Response(null, { status: 204, headers: cors(origin) });
+  }
+
+  const day = new Date().toISOString().slice(0, 10);
+
+  // Fold the batch down before touching the database. Ten section events in one visit become one
+  // row update, not ten — which is the difference between this fitting in the free tier and not.
+  const folded = new Map();
+  for (const raw of body.events.slice(0, EVENTS_PER_BATCH)) {
+    const name = validEvent(typeof raw === "string" ? raw : raw?.name);
+    if (!name) continue;
+    const cur = folded.get(name) || { n: 0, total: 0, max: 0 };
+    cur.n += 1;
+    if (isTiming(name)) {
+      const v = Math.max(0, Math.min(MAX_TIMING, Math.round(Number(raw?.value) || 0)));
+      cur.total += v;
+      cur.max = Math.max(cur.max, v);
+    }
+    folded.set(name, cur);
+  }
+  if (!folded.size) return new Response(null, { status: 204, headers: cors(origin) });
+
+  // Only names this day has not seen yet can grow the table, so only those are capped.
+  const known = new Set();
+  const { results } = await env.DB.prepare("SELECT name FROM events WHERE day = ?1").bind(day).all();
+  for (const r of results) known.add(r.name);
+  const room = NAMES_PER_DAY - known.size;
+  let fresh = 0;
+
+  const statements = [];
+  for (const [name, v] of folded) {
+    if (!known.has(name)) {
+      if (fresh >= room) continue;
+      fresh++;
+    }
+    statements.push(env.DB.prepare(
+      `INSERT INTO events (day, name, n, total, max) VALUES (?1, ?2, ?3, ?4, ?5)
+       ON CONFLICT(day, name) DO UPDATE SET
+         n = n + excluded.n, total = total + excluded.total, max = MAX(max, excluded.max)`
+    ).bind(day, name, v.n, v.total, v.max));
+  }
+  if (statements.length) await env.DB.batch(statements);
+  await sweep(env);
+
+  // 204: nothing useful to say, and nothing for a beacon to parse.
+  return new Response(null, { status: 204, headers: cors(origin) });
+}
+
+// ---- reading them back -----------------------------------------------------------
+// Gated on a secret set with `wrangler secret put STATS_KEY`. Without one configured the endpoint
+// refuses outright rather than defaulting to open, which is the failure mode that matters.
+async function stats(request, env, origin) {
+  const url = new URL(request.url);
+  const key = url.searchParams.get("key") || "";
+  if (!env.STATS_KEY) return json({ error: "no key configured" }, 503, origin);
+  if (!timingSafeEqual(key, env.STATS_KEY)) return json({ error: "denied" }, 403, origin);
+
+  const days = Math.max(1, Math.min(365, Number(url.searchParams.get("days")) || 30));
+  const from = new Date(Date.now() - days * 86400_000).toISOString().slice(0, 10);
+
+  const { results } = await env.DB.prepare(
+    "SELECT day, name, n, total, max FROM events WHERE day >= ?1 ORDER BY day DESC, name ASC"
+  ).bind(from).all();
+
+  // Totals over the window, plus the per-day series the page draws its chart from.
+  const totals = {};
+  const timings = {};
+  const series = {};
+  for (const r of results) {
+    totals[r.name] = (totals[r.name] || 0) + r.n;
+    if (r.total > 0 || isTiming(r.name)) {
+      const t = (timings[r.name] ||= { n: 0, total: 0, max: 0 });
+      t.n += r.n; t.total += r.total; t.max = Math.max(t.max, r.max);
+    }
+    (series[r.day] ||= {})[r.name] = r.n;
+  }
+
+  const players = await env.DB.prepare("SELECT COUNT(*) AS n FROM players").first();
+  const runs = await env.DB.prepare("SELECT COALESCE(SUM(runs), 0) AS n FROM players").first();
+
+  return json({
+    from, days, totals, timings, series,
+    board: { players: players?.n || 0, runs: runs?.n || 0 },
+    at: now(),
+  }, 200, origin);
+}
+
+// Constant time for the length it compares, so a wrong key cannot be narrowed down by timing it.
+function timingSafeEqual(a, b) {
+  const x = new TextEncoder().encode(a);
+  const y = new TextEncoder().encode(b);
+  if (x.length !== y.length) return false;
+  let diff = 0;
+  for (let i = 0; i < x.length; i++) diff |= x[i] ^ y[i];
+  return diff === 0;
+}
+
 // ---- board ----------------------------------------------------------------------
 async function board(request, env, origin) {
   const out = {};
@@ -234,6 +356,8 @@ export default {
       if (url.pathname === "/v1/board" && request.method === "GET") return await board(request, env, origin);
       if (url.pathname === "/v1/register" && request.method === "POST") return await register(request, env, origin);
       if (url.pathname === "/v1/submit" && request.method === "POST") return await submit(request, env, origin);
+      if (url.pathname === "/v1/event" && request.method === "POST") return await collect(request, env, origin);
+      if (url.pathname === "/v1/stats" && request.method === "GET") return await stats(request, env, origin);
       return json({ error: "not found" }, 404, origin);
     } catch (e) {
       // Never leak a stack to a public endpoint; the reason is in `wrangler tail` if it is needed.

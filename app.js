@@ -96,7 +96,12 @@
     const data = readCheats();
     data.ids = data.ids || [];
     const fresh = !data.ids.includes(id);
-    if (fresh) data.ids.push(id);
+    if (fresh) {
+      data.ids.push(id);
+      // only the first time: the funnel wants how many visitors ever find one, not how many
+      // times a code was re-entered
+      window.trackOnce?.(`cheat:${String(id).toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 38)}`);
+    }
     data.all = CODE_KEYS.every((k) => data.ids.includes(k));
     try { localStorage.setItem(CHEAT_KEY, JSON.stringify(data)); } catch { /* storage off: this run only */ }
     return { fresh, all: data.all, found: data.ids.length, total: CODE_KEYS.length };
@@ -174,11 +179,11 @@
   const secHead = (title, lede, link, kicker) => {
     const key = String(kicker || title).toLowerCase(), code = SEC_CODES[key], time = slotTime(key);
     return FEAT.slots ? `
-    <div class="sec-head fade">
+    <div class="sec-head fade" data-sec="${esc(key)}">
       <div><div class="sec-kicker slot-kicker"><i class="slot-ico"></i>Slot ${pad2(++slotN)}${kicker ? ` · ${esc(kicker)}` : ""}${time ? ` · ${time}` : ""}</div><h2 class="sec-title">${esc(title)}</h2>${mark(title, undefined, code)}${lede ? `<p class="sec-lede">${esc(lede)}</p>` : ""}</div>
       ${link ? `<a class="sec-link slot-load" href="${link[1]}">Load ${esc(link[0])} ▸</a>` : ""}
     </div>` : `
-    <div class="sec-head fade">
+    <div class="sec-head fade" data-sec="${esc(key)}">
       <div>${kicker ? `<div class="sec-kicker">(${esc(kicker)})</div>` : ""}<h2 class="sec-title">${esc(title)}</h2>${mark(title, undefined, code)}${lede ? `<p class="sec-lede">${esc(lede)}</p>` : ""}</div>
       ${link ? `<a class="sec-link" href="${link[1]}">(${esc(link[0])})</a>` : ""}
     </div>`;
@@ -1318,6 +1323,8 @@
           current = page;
           renderPage(page, id, query);
           settleModal(page, id);
+          trackPage(page, id);
+          watchSections();
         }, () => {
           transitioning = false;
           if (FEAT.gameMenu) PAGE_LETTERS.home = "S"; // the H was the way in; from here on Home is START
@@ -1329,8 +1336,78 @@
       renderPage(page, id, query);
     }
     settleModal(page, id);
+    trackPage(page, id);
+    watchSections();
   };
   addEventListener("hashchange", route);
+
+  // ---------- analytics ----------
+  // Counters only, and every call is optional: if analytics.js did not load, `window.track` is
+  // undefined and every one of these is a no-op. Nothing below can break the page.
+  const trackPage = (page, id) => {
+    window.trackOnce?.(`page:${page}`);
+    if (id) window.trackOnce?.(`work:${String(id).toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 38)}`);
+  };
+
+  // Which sections people actually scroll to. One observer, rebuilt per render, firing once per
+  // section per page — a scroll event would fire hundreds of times for the same answer.
+  let secObserver = null;
+  const watchSections = () => {
+    if (secObserver) secObserver.disconnect();
+    if (!("IntersectionObserver" in window) || !window.trackOnce) return;
+    secObserver = new IntersectionObserver((entries) => {
+      for (const en of entries) {
+        if (!en.isIntersecting) continue;
+        const key = en.target.dataset.sec;
+        if (key) window.trackOnce?.(`section:${key.replace(/[^a-z0-9-]/g, "")}`);
+        secObserver.unobserve(en.target);
+      }
+    }, { threshold: 0.4 });
+    document.querySelectorAll("[data-sec]").forEach((el) => secObserver.observe(el));
+  };
+
+  // One delegated handler for every outbound click, rather than an listener per rendered link —
+  // the pages re-render constantly and per-link listeners would have to be re-attached each time.
+  const OUTBOUND = [
+    [/ghostfoxgames/i, "ghostfox"],
+    [/linkedin/i, "linkedin"],
+    [/github\.com/i, "github"],
+    [/instagram/i, "instagram"],
+    [/roblox/i, "roblox"],
+  ];
+  document.addEventListener("click", (e) => {
+    const a = e.target.closest?.("a[href], button");
+    if (!a) return;
+    if (a.matches?.("[data-arcade]")) return window.trackOnce?.("pak_clicked");
+    if (a.matches?.(".restore")) return window.trackOnce?.("restored_windows");
+    const href = a.getAttribute?.("href") || "";
+    if (!href) return;
+    if (/\.pdf($|\?)/i.test(href)) return window.trackOnce?.("cv_download");
+    if (/cv\.html/i.test(href)) return window.trackOnce?.("cv_page");
+    if (href.startsWith("mailto:")) return window.trackOnce?.("outbound:email");
+    if (!/^https?:/i.test(href)) return;
+    try {
+      if (new URL(href, location.href).host === location.host) return;
+    } catch { return; }
+    const hit = OUTBOUND.find(([re]) => re.test(href));
+    window.trackOnce?.(`outbound:${hit ? hit[1] : "other"}`);
+  }, true);
+
+  // How long the tab was actually open. Pushed before the flush rather than after, so it makes the
+  // same beacon rather than being stranded in the queue when the page goes away.
+  const opened = Date.now();
+  let dwellSent = false;
+  const sendDwell = () => {
+    if (dwellSent) return;
+    dwellSent = true;
+    window.track?.("dwell:site", Math.round((Date.now() - opened) / 1000));
+    window.trackFlush?.(true);
+  };
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") sendDwell(); });
+  addEventListener("pagehide", sendDwell);
+
+  window.track?.("visit");
+  window.track?.(matchMedia("(max-width: 900px)").matches ? "device:mobile" : "device:desktop");
 
   // ---------- interactive barcodes (FEAT.inputString) ----------
   const ARROWS = { U: 0, UR: 45, R: 90, DR: 135, D: 180, DL: 225, L: 270, UL: 315 };
@@ -1509,7 +1586,7 @@
   // ---------- loading screen: console boot over CRT noise → intro ----------
   const runLoader = () => {
     const el = document.getElementById("loader");
-    if (!el) return document.body.classList.add("ready");
+    if (!el) { window.trackOnce?.("intro_passed"); return document.body.classList.add("ready"); }
     const left = el.querySelector(".ld-left"), right = el.querySelector(".ld-right");
     const pcts = [...el.querySelectorAll(".ld-pct")], fills = [...el.querySelectorAll(".ld-fill, .ld-track i")], bar = el.querySelector(".ld-bar");
 
@@ -1626,7 +1703,7 @@
       if (!complete && shown >= 100 && typed) {
         complete = true; // flips LOADING SITE to COMPLETE
         if (reduceMotion) {
-          setTimeout(() => { document.body.classList.add("ready"); el.style.transition = "opacity .4s"; el.style.opacity = "0"; }, 300);
+          setTimeout(() => { window.trackOnce?.("intro_passed"); document.body.classList.add("ready"); el.style.transition = "opacity .4s"; el.style.opacity = "0"; }, 300);
           setTimeout(() => el.remove(), 800);
         } else {
           setTimeout(() => el.classList.add("fold"), 350); // bar splits and folds into an H
@@ -1659,6 +1736,7 @@
       el.classList.add("hfade");
       setTimeout(() => {
         // intro starts now, so the page seen through the H is already in its hidden starting state
+        window.trackOnce?.("intro_passed");
         document.body.classList.add("ready");
         const t0 = performance.now();
         const step = (now) => {

@@ -153,5 +153,62 @@ ok("health responds", health.status === 200 && health.json.ok === true);
 const garbage = await call("POST", "/v1/submit", "not json");
 ok("a malformed body is a 400, not a 500", garbage.status === 400 || garbage.status === 404, `got ${garbage.status}`);
 
+console.log("\nanalytics");
+db.exec("DELETE FROM rate");
+ip = "203.0.113.77";
+const today = new Date().toISOString().slice(0, 10);
+const rows = () => Object.fromEntries(
+  db.prepare("SELECT name, n, total, max FROM events WHERE day = ?").all(today).map((r) => [r.name, r])
+);
+
+await call("POST", "/v1/event", { events: ["visit", "intro_passed", "section:work", "cv_download"] });
+let e = rows();
+ok("counts the events it is given", e.visit?.n === 1 && e.cv_download?.n === 1, JSON.stringify(Object.keys(e)));
+
+// the whole point of the design: repeats fold into one row, they do not add rows
+await call("POST", "/v1/event", { events: ["visit", "visit", "visit", "visit", "visit"] });
+e = rows();
+ok("repeats increment, they do not multiply rows", e.visit?.n === 6, JSON.stringify(e.visit));
+ok("one row per name per day",
+  db.prepare("SELECT COUNT(*) AS n FROM events WHERE day = ? AND name = 'visit'").get(today).n === 1);
+
+// the allowlist is the whole security model for a public, unauthenticated write endpoint
+await call("POST", "/v1/event", { events: ["totally_made_up", "section:../../etc", "'; DROP TABLE events; --", "outbound:GITHUB"] });
+e = rows();
+ok("refuses a name that is not on the list", !e.totally_made_up, JSON.stringify(Object.keys(e)));
+ok("refuses a hostile suffix", !Object.keys(e).some((k) => k.includes("..") || k.includes("DROP")), JSON.stringify(Object.keys(e)));
+ok("the events table survived the injection attempt",
+  db.prepare("SELECT COUNT(*) AS n FROM events").get().n > 0);
+
+// timings carry a value, and it is bounded
+await call("POST", "/v1/event", { events: [{ name: "dwell:run", value: 214 }, { name: "dwell:run", value: 90 }] });
+e = rows();
+ok("timings sum and keep a maximum",
+  e["dwell:run"]?.n === 2 && e["dwell:run"]?.total === 304 && e["dwell:run"]?.max === 214, JSON.stringify(e["dwell:run"]));
+await call("POST", "/v1/event", { events: [{ name: "dwell:run", value: 999999999 }] });
+e = rows();
+ok("an absurd duration is clamped, not stored", e["dwell:run"].max === 6 * 60 * 60, JSON.stringify(e["dwell:run"]));
+
+// an unbounded public writer is the real risk here; the per-day name cap is what bounds it
+for (let batch = 0; batch < 20; batch++) {
+  db.exec("DELETE FROM rate");
+  await call("POST", "/v1/event", { events: Array.from({ length: 40 }, (_, i) => `work:spam-${batch}-${i}`) });
+}
+const distinct = db.prepare("SELECT COUNT(*) AS n FROM events WHERE day = ?").get(today).n;
+ok("a flood of new names cannot grow the table without limit", distinct <= 600, `${distinct} distinct names`);
+
+console.log("\nstats");
+const noKey = await call("GET", "/v1/stats?key=whatever");
+ok("refuses when no key is configured", noKey.status === 503, JSON.stringify(noKey.json));
+env.STATS_KEY = "s3cret-key";
+const wrong = await call("GET", "/v1/stats?key=wrong");
+ok("refuses a wrong key", wrong.status === 403);
+const right = await call("GET", "/v1/stats?key=s3cret-key&days=7");
+ok("returns totals with the right key", right.status === 200 && right.json.totals.visit === 6, JSON.stringify(right.json.totals?.visit));
+ok("and the per-day series", !!right.json.series?.[today], Object.keys(right.json.series || {}).join(","));
+ok("and the board summary", typeof right.json.board?.players === "number");
+ok("no visitor identifier anywhere in the response",
+  !JSON.stringify(right.json).match(/\bip\b|uuid|session|visitor/i), "checked");
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

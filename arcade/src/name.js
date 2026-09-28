@@ -91,6 +91,7 @@ export function askName(host, onDone, { existing = "", canCancel = false } = {})
     const res = validate();
     if (!res) { input.focus(); return; }
     store.save().name = res.value;
+    window.track?.("name_set");
     if (!store.save().tag) store.save().tag = makeTag(1);
     store.flush();
     host.hidden = true;
