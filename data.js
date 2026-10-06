@@ -17,7 +17,7 @@ window.SITE = {
 
   about: [
     "I'm a game designer with 6+ years of development experience, specializing in content and technical design for live service titles.",
-    "I started in QA and game security on FIFA Mobile, moved into game and technical design at EA, then designed FTUE, quests and event loops for The Sims: Town Stories at Maxis. Today I'm Game Director at Ghost Fox Games — a studio of EA veterans in the 2026 Roblox Incubator — building Cosmic Carnage.",
+    "I started in QA and game security on FIFA Mobile, moved into game and technical design at EA, then designed FTUE, quests and event loops for The Sims: Town Stories at Maxis. Today I'm Game Director at Ghost Fox Games — a studio of EA veterans in the 2026 Roblox Incubator — building Cosmic Carnage / Crater Crashers.",
     "Off the clock I shoot street, travel and portrait photography, and a lot of live music.",
   ],
 
@@ -43,7 +43,7 @@ window.SITE = {
     summary: "Game Designer with 6+ years of development experience specializing in content and technical design for live service titles. Proven track record of mastering complex tools and delivering in fast-paced environments.",
     experience: [
       {
-        org: "Ghost Fox Games", role: "Game Director", project: "Cosmic Carnage, Roblox Studio", when: "Apr 2026 – Present",
+        org: "Ghost Fox Games", role: "Game Director", project: "Cosmic Carnage / Crater Crashers, Roblox Studio", when: "Apr 2026 – Present",
         bullets: [
           "Co-founded an independent studio of EA veterans building UGC experiences; accepted into the 2026 Roblox Incubator program",
           "Engineered and prototyped core PvP vehicular combat mechanics, weapon systems, and player customization using Luau in Roblox Studio during a 3-week sprint cycle",
@@ -106,10 +106,10 @@ window.SITE = {
   // `logo` (optional) shows on the project page. `pos` sets the card crop (CSS object-position).
   work: [
     {
-      title: "Ghost Fox Games", tag: "Cosmic Carnage · Roblox", kind: "game", year: "2026", featured: true,
+      title: "Ghost Fox Games", tag: "Cosmic Carnage / Crater Crashers · Roblox", kind: "game", year: "2026", featured: true,
       cover: "images/games/cc-boom.jpg", pos: "50% 50%", logo: "images/games/gfg-logo.png",
       links: [["ghostfoxgames.ca ↗", "https://ghostfoxgames.ca"], ["Roblox Incubator 2026 ↗", "https://about.roblox.com/newsroom/2026/06/2026-roblox-incubator-cohort"]],
-      summary: "Game Director at Ghost Fox Games, an independent studio of seven EA veterans in the 2026 Roblox Incubator. Our lead title, Cosmic Carnage, revives classic car combat as a futuristic demolition derby, with outlandish hero vehicles battling across explosive, ever-changing arenas.",
+      summary: "Game Director at Ghost Fox Games, an independent studio of seven EA veterans in the 2026 Roblox Incubator. Our lead titles, Cosmic Carnage / Crater Crashers, revive classic car combat as a futuristic demolition derby, with outlandish hero vehicles battling across explosive, ever-changing arenas.",
       details: [
         ["Role", "Co-Founder / Game Director"],
         ["Games", "Cosmic Carnage, Crater Crashers"],

@@ -92,7 +92,7 @@ export const STANDS = [
     ],
   },
   {
-    org: "GHOST FOX GAMES", role: "CO-FOUNDER / GAME DIRECTOR · COSMIC CARNAGE", when: "2026 —",
+    org: "GHOST FOX GAMES", role: "CO-FOUNDER / GAME DIRECTOR · COSMIC CARNAGE / CRATER CRASHERS", when: "2026 —",
     line: "Seven EA veterans · Roblox Incubator 2026",
     duties: [
       "PvP vehicular combat and weapon systems",
@@ -100,7 +100,7 @@ export const STANDS = [
       "Match structure and system documentation",
     ],
     accent: 0xff5f8f, grand: true, art: [
-      { file: "cosmic-carnage-keyart.webp", cap: "COSMIC CARNAGE" },
+      { file: "cosmic-carnage-keyart.webp", cap: "CRATER CRASHERS" },
       { file: "gfg-logo.webp", cap: "GHOST FOX GAMES" },
       { file: "cc-boom.webp", cap: "CAR COMBAT" },
     ],
