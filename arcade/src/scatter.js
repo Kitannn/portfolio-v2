@@ -21,7 +21,7 @@ const MARKS = [
   { text: "TOTAL'D", sub: "ROBLOX" },
   { text: "BIRBKIT", sub: "KITANNN" },
   { text: "SECTOR 86", sub: "GR" },
-  { text: "CRATER CRASHERS", sub: "GHOST FOX" },
+  { text: "GHOST FOX", sub: "GAMES" },
 ];
 
 // ---- a sign, drawn to a canvas and used as a texture -----------------------------
