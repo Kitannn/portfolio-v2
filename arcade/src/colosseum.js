@@ -92,7 +92,7 @@ export const STANDS = [
     ],
   },
   {
-    org: "GHOST FOX GAMES", role: "CO-FOUNDER / GAME DIRECTOR · COSMIC CARNAGE / CRATER CRASHERS", when: "2026 —",
+    org: "GHOST FOX GAMES", role: "CO-FOUNDER / GAME DIRECTOR · TOTAL'D / CRATER CRASHERS", when: "2026 —",
     line: "Seven EA veterans · Roblox Incubator 2026",
     duties: [
       "PvP vehicular combat and weapon systems",

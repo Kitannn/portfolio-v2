@@ -217,7 +217,7 @@
     // Sizes are for a 1280×800 hero and scale up with larger screens (see --s in initHero).
     { id: "birbkit", title: "birbkit.jpg", src: "images/birbkit-1024.jpg", x: 6, y: 15, w: 250, h: 320, depth: 18, zoom: 0.3, href: "#/profile" },
     { id: "sims", title: "town_stories.webp", src: games[1]?.cover, x: 39, y: 13, w: 215, h: 140, depth: 24, zoom: 0.5, href: `#/works/${slug(games[1]?.title || "")}` },
-    { id: "cc", title: "cosmic_carnage.jpg", src: games[0]?.cover, x: 20, y: 51, w: 370, h: 225, depth: 30, zoom: 0.6, href: `#/works/${slug(games[0]?.title || "")}` },
+    { id: "cc", title: "totald.jpg", src: games[0]?.cover, x: 20, y: 51, w: 370, h: 225, depth: 30, zoom: 0.6, href: `#/works/${slug(games[0]?.title || "")}` },
     { id: "photo", title: "tokyo.jpg", src: photos[0]?.cover, x: 46, y: 47, w: 185, h: 235, depth: 12, zoom: 0.55, href: `#/works/${slug(photos[0]?.title || "")}` },
     { id: "fifa", title: "fifa_mobile.jpg", src: games[2]?.hero || games[2]?.cover, x: 61, y: 63, w: 285, h: 175, depth: 22, zoom: 0.55, href: `#/works/${slug(games[2]?.title || "")}` },
   ];

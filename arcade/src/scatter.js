@@ -18,7 +18,7 @@ const REGROW = 26;                   // seconds before a cleared patch comes bac
 const MARKS = [
   { text: "PLUMBROOK", sub: "EA MAXIS" },
   { text: "TOWN STORIES", sub: "THE SIMS" },
-  { text: "COSMIC CARNAGE", sub: "ROBLOX" },
+  { text: "TOTAL'D", sub: "ROBLOX" },
   { text: "BIRBKIT", sub: "KITANNN" },
   { text: "SECTOR 86", sub: "GR" },
   { text: "CRATER CRASHERS", sub: "GHOST FOX" },
