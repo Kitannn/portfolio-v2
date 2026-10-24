@@ -100,6 +100,7 @@ export const STANDS = [
       "Match structure and system documentation",
     ],
     accent: 0xff5f8f, grand: true, art: [
+      { file: "totald-keyart.webp", cap: "TOTAL'D" },
       { file: "cosmic-carnage-keyart.webp", cap: "CRATER CRASHERS" },
       { file: "gfg-logo.webp", cap: "GHOST FOX GAMES" },
       { file: "cc-boom.webp", cap: "CAR COMBAT" },
@@ -402,7 +403,7 @@ export function buildColosseum(scene) {
     // rather than by a fraction of the wedge is what keeps a stand with one board and a stand
     // with four looking like they belong to the same building.
     const boards = [...s.art.map((a) => ({ art: a })), { duty: true }];
-    const artW = s.art.length >= 3 ? 62 : 70;
+    const artW = s.art.length >= 4 ? 54 : s.art.length >= 3 ? 62 : 70;
     const dutyW = s.art.length ? 44 : 104;      // an empty wall gets a much bigger board
     const widths = boards.map((bd) => (bd.duty ? dutyW : artW));
     const GAP = 11;
