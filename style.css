@@ -117,8 +117,10 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .layer { position: absolute; inset: 0; will-change: transform; pointer-events: none; }
 .layer > * { pointer-events: auto; }
 .float-win { position: absolute; touch-action: none; }
-.float-win .win-bar { cursor: grab; }
-.float-win.dragging .win-bar { cursor: grabbing; }
+/* the whole window is the grip, so it carries the grab cursor — including over the body link */
+.float-win, .float-win .reveal { cursor: grab; user-select: none; -webkit-user-select: none; }
+.float-win.dragging, .float-win.dragging .reveal { cursor: grabbing; }
+.float-win .win-x { cursor: pointer; }
 .float-win.closed { display: none; }
 .float-win .win-body { height: calc(100% - 26px); }
 .reveal { position: absolute; inset: 0; display: block; overflow: hidden; }

@@ -340,7 +340,7 @@
           <div class="layer" data-depth="${w.depth}">
             <div class="win float-win" data-win="${w.id}" data-zoom="${w.zoom}" style="--i:${i};left:${w.x}%;top:${w.y}%;width:calc(${w.w}px * var(--s, 1));height:calc(${w.h}px * var(--s, 1));z-index:${10 + i}">
               <div class="win-bar"><span>${esc(w.title)}</span><button class="win-x" type="button" aria-label="Close window" data-winclose>×</button></div>
-              <div class="win-body"><a class="reveal" href="${w.href}" aria-label="Open ${esc(w.title)}"><img src="${esc(asset(tiny(w.src, "m")))}"${fall(w.src)} alt="" draggable="false"></a></div>
+              <div class="win-body"><a class="reveal" href="${w.href}" aria-label="Open ${esc(w.title)}" draggable="false"><img src="${esc(asset(tiny(w.src, "m")))}"${fall(w.src)} alt="" draggable="false"></a></div>
             </div>
           </div>`).join("")}
         ${FEAT.devices ? devices() : clouds()}
@@ -997,37 +997,67 @@
     requestAnimationFrame(loop);
 
     // dragging + closing windows
+    //
+    // The grip is the whole window, not the title bar alone: a 26 px strip is a hard target with a
+    // finger. The body still holds a link, so the two gestures are told apart by distance — nothing
+    // moves until the pointer has travelled DRAG_SLOP, and a drag that did start swallows the click
+    // the browser fires on release. A press that never passes the threshold is left alone entirely
+    // and opens the page exactly as it did before.
+    const DRAG_SLOP = 5;
     let z = 20;
+    let justDragged = false;
     const restore = hero.querySelector(".restore");
+
+    // Capture phase on the document, because it has to beat the link's own navigation and the
+    // trailing click does not reliably belong to any one element. Any fresh press clears the flag
+    // first, so a drag that ends without a click — which is most touch drags — cannot leave a
+    // stale one behind to eat somebody's next tap.
+    document.addEventListener("pointerdown", () => { justDragged = false; }, true);
+    document.addEventListener("click", (e) => {
+      if (!justDragged) return;
+      justDragged = false;
+      e.preventDefault();
+      e.stopPropagation();
+    }, true);
+
     wins.forEach((win) => {
-      const bar = win.querySelector(".win-bar");
-      win.addEventListener("pointerdown", () => { win.style.zIndex = ++z; });
-      bar.addEventListener("pointerdown", (e) => {
+      win.addEventListener("pointerdown", (e) => {
         if (e.target.closest("[data-winclose]")) return;
+        win.style.zIndex = ++z;
         const sx = e.clientX, sy = e.clientY, ox = win.offsetLeft, oy = win.offsetTop;
-        win.classList.add("dragging");
-        // !important, because the narrow-screen rules pin two of these windows to fixed percentages
-        // with !important of their own — without matching it, a drag on a phone sets styles that
-        // the stylesheet quietly overrules and the window never moves.
+        let dragging = false;
+
         const move = (ev) => {
-          win.style.setProperty("left", `${ox + ev.clientX - sx}px`, "important");
-          win.style.setProperty("top", `${oy + ev.clientY - sy}px`, "important");
+          const dx = ev.clientX - sx, dy = ev.clientY - sy;
+          if (!dragging) {
+            if (Math.abs(dx) < DRAG_SLOP && Math.abs(dy) < DRAG_SLOP) return;
+            dragging = true;
+            win.classList.add("dragging");
+            // Capture only once the drag is real. Taking it on pointerdown instead retargets the
+            // click that follows a plain press to the window itself, and the link in the body
+            // then never activates — the window becomes draggable but stops opening anything.
+            // It also keeps a release outside the viewport from stranding the window mid-drag.
+            try { win.setPointerCapture(ev.pointerId); } catch { /* the document listeners still carry it */ }
+          }
+          // !important, because the narrow-screen rules pin two of these windows to fixed
+          // percentages with !important of their own — without matching it, a drag on a phone sets
+          // styles that the stylesheet quietly overrules and the window never moves.
+          win.style.setProperty("left", `${ox + dx}px`, "important");
+          win.style.setProperty("top", `${oy + dy}px`, "important");
         };
         const up = () => {
+          if (dragging) justDragged = true;
           win.classList.remove("dragging");
-          bar.removeEventListener("pointermove", move);
-          bar.removeEventListener("pointerup", up);
-          bar.removeEventListener("pointercancel", up);
+          document.removeEventListener("pointermove", move);
+          document.removeEventListener("pointerup", up);
+          document.removeEventListener("pointercancel", up);
         };
-        bar.addEventListener("pointermove", move);
-        bar.addEventListener("pointerup", up);
+        // On the document rather than the window: the pointer leaves a 250 px box almost at once,
+        // and until the drag starts there is no capture to bring the events back.
+        document.addEventListener("pointermove", move);
+        document.addEventListener("pointerup", up);
         // a touch drag the browser decides to take over for scrolling ends here, not at pointerup
-        bar.addEventListener("pointercancel", up);
-        // Capture keeps the drag alive once the finger slides off the title bar, which on a phone
-        // it always does. It throws if the pointer has already gone, and that must not happen
-        // before the listeners above are attached — a throw there leaves the window grabbed for
-        // good, with nothing left listening for the release.
-        try { bar.setPointerCapture(e.pointerId); } catch { /* no capture; the drag still works over the bar */ }
+        document.addEventListener("pointercancel", up);
       });
       win.querySelector("[data-winclose]").addEventListener("click", () => {
         win.classList.add("closed");
@@ -1752,7 +1782,7 @@
     };
   };
 
-  // ---------- cursor readout: X:Y coordinates, "GRAB" over draggable title bars ----------
+  // ---------- cursor readout: X:Y coordinates, "GRAB" over the draggable windows ----------
   const initCursorHud = () => {
     if (!matchMedia("(pointer: fine)").matches) return;
     const hud = document.createElement("div");
@@ -1766,8 +1796,8 @@
       if (e.pointerType !== "mouse") return;
       hud.style.transform = `translate(${e.clientX + 16}px, ${e.clientY + 18}px)`;
       xy.textContent = `X:${pad(e.clientX)}\nY:${pad(e.clientY)}`; // stacked, X over Y
-      const onBar = e.target.closest?.(".float-win .win-bar") && !e.target.closest("[data-winclose]");
-      hud.classList.toggle("grab", !!onBar || !!document.querySelector(".float-win.dragging"));
+      const onWin = e.target.closest?.(".float-win") && !e.target.closest("[data-winclose]");
+      hud.classList.toggle("grab", !!onWin || !!document.querySelector(".float-win.dragging"));
       hud.classList.add("on");
     }, { passive: true });
     document.documentElement.addEventListener("pointerleave", () => hud.classList.remove("on"));
