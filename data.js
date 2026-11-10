@@ -16,7 +16,7 @@ window.SITE = {
   faqImageCrop: false, // remove (or set true) to crop the FAQ image to portrait 4:5
 
   about: [
-    "I'm a game designer with 6+ years of development experience, specializing in content and technical design for live service titles.",
+    "I'm a game designer with {EXP} of development experience, specializing in content and technical design for live service titles.",
     "I started in QA and game security on FIFA Mobile, moved into game and technical design at EA, then designed FTUE, quests and event loops for The Sims: Town Stories at Maxis. Today I'm Game Director at Ghost Fox Games — a studio of EA veterans in the 2026 Roblox Incubator — building TOTAL'D.",
     "Off the clock I shoot street, travel and portrait photography, and a lot of live music.",
   ],
@@ -40,7 +40,7 @@ window.SITE = {
 
   // Résumé — feeds the Profile timeline and cv.html.
   cv: {
-    summary: "Game Designer with 6+ years of development experience specializing in content and technical design for live service titles. Proven track record of mastering complex tools and delivering in fast-paced environments.",
+    summary: "Game Designer with {EXP} of development experience specializing in content and technical design for live service titles. Proven track record of mastering complex tools and delivering in fast-paced environments.",
     experience: [
       {
         org: "Ghost Fox Games", role: "Game Director", project: "TOTAL'D, Roblox Studio", when: "Apr 2026 – Present",
@@ -480,3 +480,53 @@ window.SITE = {
     ["GitHub", "https://github.com/kitannn"],
   ],
 };
+
+// ---- time in games ---------------------------------------------------------------
+// The bio and the CV summary both quote how long Henry has been in the industry, and a number
+// typed into prose goes stale the month after it is written. They carry {EXP} instead and it is
+// filled in here, from the experience list above, wherever the content is rendered — the two
+// sites and both CV pages all read this file, so there is one figure and one place to get it right.
+//
+// It is the SUM of each role's length, not the span from the first job to today: there is a year
+// between EA and Maxis that nobody worked, and counting it would overstate the total by that year.
+(function () {
+  var MON = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
+  var now = new Date();
+  var nowM = now.getFullYear() * 12 + now.getMonth();
+  // "Present" has no date to parse, so an unparsed end means today — which is what it means.
+  var monthOf = function (part) {
+    var m = /([A-Z][a-z]{2})[a-z]* (\d{4})/.exec(part || "");
+    return m ? +m[2] * 12 + MON[m[1]] : nowM;
+  };
+
+  // Merged rather than summed, so two roles held at once count once and the gaps still do not
+  // count at all. Any of en dash, em dash or hyphen separates a range, because the next person to
+  // add a role will type whichever their keyboard offers and a missed split would read the whole
+  // string as a start date and silently add years.
+  var spans = (window.SITE.cv.experience || []).map(function (role) {
+    var ends = String(role.when).split(/\s[–—-]\s/);
+    return [monthOf(ends[0]), monthOf(ends[1])];
+  }).filter(function (p) { return p[1] > p[0]; }).sort(function (a, b) { return a[0] - b[0]; });
+
+  var months = 0, from = -1, to = -1;
+  spans.forEach(function (p) {
+    if (p[0] > to) { months += Math.max(0, to - from); from = p[0]; to = p[1]; }
+    else if (p[1] > to) { to = p[1]; }
+  });
+  months += Math.max(0, to - from);
+
+  // Whole years with a plus, the way a CV says it: "6+ years". The spare months are deliberately
+  // not spelled out — the phrase stays readable and only changes once a year.
+  var y = Math.floor(months / 12), m = months % 12;
+  var text = y >= 1 ? y + "+ years" : m + (m === 1 ? " month" : " months");
+
+  var fill = function (str) { return String(str).replace(/\{EXP\}/g, text); };
+  window.SITE.about = window.SITE.about.map(fill);
+  window.SITE.cv.summary = fill(window.SITE.cv.summary);
+  window.SITE.experienceMonths = months;   // the Profile save-slot header quotes the same total
+
+  // The "years in games" stat tile, which the boot screen also reads for its EXPERIENCE line.
+  // Whole years with a plus, since a tile has room for a number and not a sentence.
+  var tile = (window.SITE.stats || []).filter(function (row) { return /years/i.test(row[1]); })[0];
+  if (tile && y >= 1) tile[0] = y + "+";
+})();

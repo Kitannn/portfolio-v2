@@ -167,7 +167,9 @@
   const slotTime = (key) => {
     const exp = S.cv.experience, startOf = (e) => monthOf(String(e.when).split("–")[0]);
     switch (key) {
-      case "about": case "profile": return `${span(nowM() - Math.min(...exp.map(startOf)))} in games`;
+      // The sum of the roles' lengths, worked out in data.js, not the span since the first job:
+      // there is a year between EA and Maxis that nobody worked, and the bio quotes this same total.
+      case "about": case "profile": return `${span(S.experienceMonths || (nowM() - Math.min(...exp.map(startOf))))} in games`;
       case "experience": return exp[0] ? `${span(nowM() - startOf(exp[0]))} at ${esc(exp[0].org)}` : "";
       case "work": return `${span(nowM() - firstYear(games) * 12)} making games`;
       case "photography": return `${span(nowM() - firstYear(photos) * 12)} behind the lens`;
